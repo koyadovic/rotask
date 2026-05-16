@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Rotask</string>
+
+    <string name="home_title">Rotask</string>
+    <string name="daily_minutes_label">Tiempo diario</string>
+    <string name="daily_minutes_value">%1$d min/día</string>
+    <string name="empty_tasks">Aún no hay tareas. Pulsa + para añadir la primera.</string>
+    <string name="start_work">Iniciar trabajo</string>
+    <string name="all_done_today">Por hoy, todo cumplido</string>
+    <string name="add_task">Añadir tarea</string>
+    <string name="edit_task">Editar tarea</string>
+    <string name="delete_task">Eliminar tarea</string>
+    <string name="task_name">Nombre</string>
+    <string name="task_weight">Peso</string>
+    <string name="save">Guardar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="delete">Eliminar</string>
+
+    <string name="work_title">Trabajando</string>
+    <string name="stop_work">Detener</string>
+    <string name="elapsed">Llevas</string>
+    <string name="target">Objetivo de hoy</string>
+    <string name="session_done">Objetivo cumplido</string>
+    <string name="back_to_home">Volver</string>
+
+    <string name="config_title">Configurar minutos por día</string>
+    <string name="minutes_per_day">Minutos por día</string>
+</resources>
