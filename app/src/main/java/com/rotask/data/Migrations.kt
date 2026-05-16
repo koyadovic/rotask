@@ -34,3 +34,44 @@ val MIGRATION_2_3: Migration = object : Migration(2, 3) {
         db.execSQL("ALTER TABLE `tasks_new` RENAME TO `tasks`")
     }
 }
+
+val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `tasks_new` (
+                `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                `name` TEXT NOT NULL,
+                `description` TEXT NOT NULL,
+                `weight` REAL NOT NULL,
+                `enabled` INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `tasks_new` (`id`, `name`, `description`, `weight`, `enabled`)
+            SELECT `id`, `name`, `description`, `weight`, `enabled` FROM `tasks`
+            """.trimIndent()
+        )
+        db.execSQL("DROP TABLE `tasks`")
+        db.execSQL("ALTER TABLE `tasks_new` RENAME TO `tasks`")
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `settings_new` (
+                `id` INTEGER NOT NULL PRIMARY KEY,
+                `dailyMinutes` INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO `settings_new` (`id`, `dailyMinutes`)
+            SELECT `id`, `dailyMinutes` FROM `settings`
+            """.trimIndent()
+        )
+        db.execSQL("DROP TABLE `settings`")
+        db.execSQL("ALTER TABLE `settings_new` RENAME TO `settings`")
+    }
+}

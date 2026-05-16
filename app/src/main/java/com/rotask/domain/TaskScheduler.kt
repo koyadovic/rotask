@@ -14,42 +14,7 @@ data class TaskStatus(
 
 class TaskScheduler(private val db: AppDatabase) {
 
-    suspend fun ensureSettled(today: LocalDate) {
-        val settings = db.settingsDao().get() ?: return
-        val last = LocalDate.parse(settings.lastSettleDate)
-        if (!last.isBefore(today)) return
-
-        val tasks = db.taskDao().getAll().toMutableList()
-        if (tasks.isEmpty()) {
-            db.settingsDao().upsert(settings.copy(lastSettleDate = today.toString()))
-            return
-        }
-
-        val totalSecs = settings.dailyMinutes * 60L
-        var cur = last
-        while (cur.isBefore(today)) {
-            val enabledIndices = tasks.withIndex()
-                .filter { it.value.enabled }
-                .map { it.index }
-            val sumWeights = enabledIndices.sumOf { tasks[it].weight }
-            if (sumWeights > 0.0) {
-                for (i in enabledIndices) {
-                    val t = tasks[i]
-                    val base = (totalSecs * t.weight / sumWeights).toLong()
-                    val worked = db.workSessionDao().totalForDate(t.id, cur.toString())
-                    val newDebt = (t.debtSeconds + base - worked).coerceAtLeast(0)
-                    tasks[i] = t.copy(debtSeconds = newDebt)
-                }
-            }
-            cur = cur.plusDays(1)
-        }
-
-        tasks.filter { it.enabled }.forEach { db.taskDao().update(it) }
-        db.settingsDao().upsert(settings.copy(lastSettleDate = today.toString()))
-    }
-
     suspend fun computeStatus(today: LocalDate): List<TaskStatus> {
-        ensureSettled(today)
         val settings = db.settingsDao().get() ?: return emptyList()
         val tasks = db.taskDao().getAll()
         if (tasks.isEmpty()) return emptyList()
@@ -59,8 +24,7 @@ class TaskScheduler(private val db: AppDatabase) {
         return tasks.map { t ->
             val worked = db.workSessionDao().totalForDate(t.id, today.toString())
             if (t.enabled && sumWeights > 0.0) {
-                val base = (totalSecs * t.weight / sumWeights).toLong()
-                val target = base + t.debtSeconds
+                val target = (totalSecs * t.weight / sumWeights).toLong()
                 TaskStatus(
                     task = t,
                     targetSecondsToday = target,

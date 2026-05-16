@@ -7,5 +7,4 @@ import androidx.room.PrimaryKey
 data class SettingsEntity(
     @PrimaryKey val id: Int = 1,
     val dailyMinutes: Int,
-    val lastSettleDate: String
 )

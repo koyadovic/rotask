@@ -17,11 +17,8 @@ class RotaskRepository(
 
     suspend fun bootstrap() {
         if (db.settingsDao().get() == null) {
-            db.settingsDao().upsert(
-                SettingsEntity(dailyMinutes = 60, lastSettleDate = clock().toString())
-            )
+            db.settingsDao().upsert(SettingsEntity(dailyMinutes = 60))
         }
-        scheduler.ensureSettled(clock())
     }
 
     suspend fun status(): List<TaskStatus> = scheduler.computeStatus(clock())
@@ -31,14 +28,18 @@ class RotaskRepository(
 
     suspend fun pickNext(): TaskStatus? = scheduler.pickNext(clock())
 
+    suspend fun pickNextExcluding(excludeTaskId: Long): TaskStatus? {
+        return scheduler.computeStatus(clock())
+            .filter { it.task.id != excludeTaskId && it.task.enabled && it.remainingSecondsToday > 0 }
+            .maxByOrNull { it.remainingSecondsToday }
+    }
+
     suspend fun setDailyMinutes(minutes: Int) {
-        scheduler.ensureSettled(clock())
         val s = db.settingsDao().get() ?: return
         db.settingsDao().upsert(s.copy(dailyMinutes = minutes))
     }
 
     suspend fun addTask(name: String, description: String, weight: Double, enabled: Boolean) {
-        scheduler.ensureSettled(clock())
         db.taskDao().insert(
             Task(
                 name = name,
@@ -49,19 +50,11 @@ class RotaskRepository(
         )
     }
 
-    suspend fun pickNextExcluding(excludeTaskId: Long): TaskStatus? {
-        return scheduler.computeStatus(clock())
-            .filter { it.task.id != excludeTaskId && it.task.enabled && it.remainingSecondsToday > 0 }
-            .maxByOrNull { it.remainingSecondsToday }
-    }
-
     suspend fun updateTask(task: Task) {
-        scheduler.ensureSettled(clock())
         db.taskDao().update(task)
     }
 
     suspend fun setEnabled(task: Task, enabled: Boolean) {
-        scheduler.ensureSettled(clock())
         db.taskDao().update(task.copy(enabled = enabled))
     }
 

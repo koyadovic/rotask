@@ -15,7 +15,7 @@ Android app to split your working time across several tasks with configurable we
 - Each active task gets a daily target proportional to its weight, divided over the sum of active weights. Example: 4 active tasks with weights 2/1/1/1 and 60 min/day → 24/12/12/12 min.
 - When you press **Start work** the app picks the active task with the most pending seconds today and opens a session paused. You press play when you're ready.
 - When a session reaches its target (or you press Skip) the next-most-behind active task is loaded already paused, so you control when the next session starts.
-- If you don't reach the daily target, the deficit carries over and is added to the next day's target. Working over the target doesn't generate credit. Paused tasks don't accumulate new deficit.
+- Each day is independent. If you don't reach today's target nothing carries over: tomorrow you start fresh with that day's target. Working over the target also doesn't bank credit.
 
 ## Stack
 
@@ -51,18 +51,16 @@ Default language is English (`res/values`). Spanish translation lives in `res/va
 
 ## Algorithm (summary)
 
-`debtSeconds` on each task accumulates what's owed from previous days. When the date rolls over, `ensureSettled` replays the missed days:
+Each day stands on its own — no cross-day carryover. Today's target for an active task is just its proportional share of the daily budget:
 
 ```
-for each day d between lastSettleDate and today:
-  for each active task t:
-    base   = dailyMinutes * 60 * weight_t / sum_active_weights
-    done   = seconds worked on t during d
-    debt_t = max(0, debt_t + base - done)
-lastSettleDate = today
+for each active task t today:
+  target_t   = dailyMinutes * 60 * weight_t / sum_active_weights
+  worked_t   = seconds worked on t today (sum over today's work_sessions)
+  remaining  = max(0, target_t - worked_t)
 ```
 
-Today, each task's effective target is `base_today + debt_t`. `pickNext()` returns the active task with the largest `target - worked_today`.
+`pickNext()` returns the active task with the largest `remaining`. At midnight everyone resets to a fresh `target_t` with `worked_t = 0`.
 
 ## License
 

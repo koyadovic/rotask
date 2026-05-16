@@ -10,5 +10,4 @@ data class Task(
     val description: String = "",
     val weight: Double,
     val enabled: Boolean = true,
-    val debtSeconds: Long = 0L
 )
