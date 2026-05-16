@@ -22,6 +22,10 @@
 
     <string name="work_title">Trabajando</string>
     <string name="stop_work">Detener</string>
+    <string name="pause_work">Pausar</string>
+    <string name="resume_work">Reanudar</string>
+    <string name="start_session">Empezar</string>
+    <string name="skip_work">Saltar</string>
     <string name="elapsed">Llevas</string>
     <string name="target">Objetivo de hoy</string>
     <string name="session_done">Objetivo cumplido</string>

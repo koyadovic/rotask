@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -21,6 +22,7 @@ data class WorkUiState(
     val taskDescription: String = "",
     val sessionTargetSeconds: Long = 0L,
     val sessionElapsedSeconds: Long = 0L,
+    val paused: Boolean = false,
     val finished: Boolean = false,
     val noWorkNeeded: Boolean = false,
 )
@@ -28,32 +30,39 @@ data class WorkUiState(
 class WorkViewModel(
     private val repo: RotaskRepository,
     private val appScope: CoroutineScope,
-    private val taskId: Long,
+    initialTaskId: Long,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WorkUiState())
     val state: StateFlow<WorkUiState> = _state.asStateFlow()
 
+    private var currentTaskId: Long = initialTaskId
     private var timerJob: Job? = null
     private val persisted = AtomicBoolean(false)
 
     init {
         viewModelScope.launch {
-            val status = repo.statusForTask(taskId)
-            if (status == null || status.remainingSecondsToday <= 0) {
-                _state.value = WorkUiState(loading = false, noWorkNeeded = true, finished = true)
-                return@launch
-            }
-            _state.value = WorkUiState(
-                loading = false,
-                taskName = status.task.name,
-                taskDescription = status.task.description,
-                sessionTargetSeconds = status.remainingSecondsToday,
-                sessionElapsedSeconds = 0L,
-                finished = false,
-            )
-            startTimer()
+            loadTask(initialTaskId, resetPersistFlag = false)
         }
+    }
+
+    private suspend fun loadTask(taskId: Long, resetPersistFlag: Boolean) {
+        val status = repo.statusForTask(taskId)
+        if (status == null || !status.task.enabled || status.remainingSecondsToday <= 0) {
+            _state.value = WorkUiState(loading = false, noWorkNeeded = true, finished = true)
+            return
+        }
+        currentTaskId = taskId
+        if (resetPersistFlag) persisted.set(false)
+        _state.value = WorkUiState(
+            loading = false,
+            taskName = status.task.name,
+            taskDescription = status.task.description,
+            sessionTargetSeconds = status.remainingSecondsToday,
+            sessionElapsedSeconds = 0L,
+            paused = true,
+            finished = false,
+        )
     }
 
     private fun startTimer() {
@@ -62,15 +71,53 @@ class WorkViewModel(
             while (true) {
                 delay(1000)
                 val current = _state.value
-                if (current.finished) break
+                if (current.finished || current.paused) break
                 val nextElapsed = current.sessionElapsedSeconds + 1
                 _state.value = current.copy(sessionElapsedSeconds = nextElapsed)
                 if (nextElapsed >= current.sessionTargetSeconds) {
-                    stop()
+                    advanceToNext(reason = AdvanceReason.AUTO_COMPLETED)
                     break
                 }
             }
         }
+    }
+
+    private enum class AdvanceReason { AUTO_COMPLETED, SKIPPED }
+
+    private fun advanceToNext(reason: AdvanceReason) {
+        timerJob?.cancel()
+        val finishedTaskId = currentTaskId
+        val elapsed = _state.value.sessionElapsedSeconds
+        viewModelScope.launch {
+            if (elapsed > 0) {
+                repo.recordWork(finishedTaskId, elapsed)
+            }
+            persisted.set(true)
+            val next = repo.pickNextExcluding(finishedTaskId)
+            if (next == null) {
+                _state.update { it.copy(finished = true) }
+                return@launch
+            }
+            loadTask(next.task.id, resetPersistFlag = true)
+        }
+    }
+
+    fun togglePause() {
+        val current = _state.value
+        if (current.finished || current.loading) return
+        if (current.paused) {
+            _state.value = current.copy(paused = false)
+            startTimer()
+        } else {
+            timerJob?.cancel()
+            _state.value = current.copy(paused = true)
+        }
+    }
+
+    fun skip() {
+        val current = _state.value
+        if (current.finished || current.loading) return
+        advanceToNext(reason = AdvanceReason.SKIPPED)
     }
 
     fun stop() {
@@ -89,6 +136,7 @@ class WorkViewModel(
     private fun persistOnce(elapsed: Long) {
         if (elapsed <= 0) return
         if (!persisted.compareAndSet(false, true)) return
+        val taskId = currentTaskId
         appScope.launch {
             repo.recordWork(taskId, elapsed)
         }

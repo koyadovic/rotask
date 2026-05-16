@@ -27,10 +27,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -53,11 +54,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rotask.R
 import com.rotask.domain.TaskStatus
 import com.rotask.ui.format.formatClock
+import com.rotask.ui.format.formatWeight
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,11 +91,6 @@ fun HomeScreen(
                 )
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { vm.showAddDialog() }) {
-                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.add_task))
-            }
-        },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Column(
@@ -116,7 +114,7 @@ fun HomeScreen(
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(state.statuses, key = { it.task.id }) { status ->
                             TaskRow(
@@ -130,9 +128,10 @@ fun HomeScreen(
                 }
             }
 
-            StartWorkButton(
-                enabled = state.hasWorkRemaining,
-                onClick = { vm.startWork() }
+            BottomBar(
+                startEnabled = state.hasWorkRemaining,
+                onStartWork = { vm.startWork() },
+                onAdd = { vm.showAddDialog() }
             )
         }
     }
@@ -142,7 +141,7 @@ fun HomeScreen(
             title = stringResource(R.string.add_task),
             initialName = "",
             initialDescription = "",
-            initialWeight = 1,
+            initialWeight = 1.0,
             initialEnabled = true,
             onSave = { name, description, weight, enabled ->
                 vm.addTask(name, description, weight, enabled)
@@ -209,25 +208,29 @@ private fun TaskRow(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = status.task.name,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 18.sp,
-                        color = nameColor
+                        fontSize = 17.sp,
+                        color = nameColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     if (status.task.description.isNotBlank()) {
                         Text(
                             text = status.task.description,
-                            fontSize = 13.sp,
-                            color = secondaryColor
+                            fontSize = 12.sp,
+                            color = secondaryColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
                 Text(
-                    text = "x${status.task.weight}",
+                    text = formatWeight(status.task.weight),
                     color = if (enabled) MaterialTheme.colorScheme.primary else secondaryColor,
                     fontWeight = FontWeight.Bold
                 )
@@ -235,8 +238,9 @@ private fun TaskRow(
                 Switch(checked = enabled, onCheckedChange = { onToggleEnabled() })
             }
 
+            Spacer(Modifier.height(6.dp))
+
             if (enabled) {
-                Spacer(Modifier.height(8.dp))
                 val target = status.targetSecondsToday
                 val worked = status.workedSecondsToday
                 val progress = if (target > 0) (worked.toFloat() / target).coerceIn(0f, 1f) else 0f
@@ -244,32 +248,48 @@ private fun TaskRow(
                     progress = { progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp)
+                        .height(6.dp)
                 )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "${formatClock(worked)} / ${formatClock(target)}",
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            } else {
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.task_paused),
-                    color = secondaryColor,
-                    fontStyle = FontStyle.Italic,
-                    fontSize = 13.sp
-                )
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, tint = secondaryColor)
+                Text(
+                    text = if (enabled) {
+                        "${formatClock(status.workedSecondsToday)} / ${formatClock(status.targetSecondsToday)}"
+                    } else {
+                        stringResource(R.string.task_paused)
+                    },
+                    fontSize = 12.sp,
+                    fontStyle = if (enabled) FontStyle.Normal else FontStyle.Italic,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurface else secondaryColor,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = null,
+                        tint = secondaryColor,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, tint = secondaryColor)
+                Spacer(Modifier.size(4.dp))
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = secondaryColor,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
             }
         }
@@ -277,7 +297,11 @@ private fun TaskRow(
 }
 
 @Composable
-private fun StartWorkButton(enabled: Boolean, onClick: () -> Unit) {
+private fun BottomBar(
+    startEnabled: Boolean,
+    onStartWork: () -> Unit,
+    onAdd: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -285,28 +309,48 @@ private fun StartWorkButton(enabled: Boolean, onClick: () -> Unit) {
     ) {
         HorizontalDivider(color = MaterialTheme.colorScheme.surface)
         Spacer(Modifier.height(12.dp))
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-            Spacer(Modifier.size(8.dp))
-            Text(
-                text = if (enabled) {
-                    stringResource(R.string.start_work)
-                } else {
-                    stringResource(R.string.all_done_today)
-                },
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Button(
+                onClick = onStartWork,
+                enabled = startEnabled,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(64.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = if (startEnabled) {
+                        stringResource(R.string.start_work)
+                    } else {
+                        stringResource(R.string.all_done_today)
+                    },
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            FilledTonalIconButton(
+                onClick = onAdd,
+                modifier = Modifier.size(64.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                ),
+            ) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = stringResource(R.string.add_task),
+                    modifier = Modifier.size(28.dp),
+                )
+            }
         }
     }
 }
@@ -316,15 +360,18 @@ private fun TaskEditDialog(
     title: String,
     initialName: String,
     initialDescription: String,
-    initialWeight: Int,
+    initialWeight: Double,
     initialEnabled: Boolean,
-    onSave: (name: String, description: String, weight: Int, enabled: Boolean) -> Unit,
+    onSave: (name: String, description: String, weight: Double, enabled: Boolean) -> Unit,
     onCancel: () -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
     var description by remember { mutableStateOf(initialDescription) }
-    var weightText by remember { mutableStateOf(initialWeight.toString()) }
+    var weightText by remember { mutableStateOf(weightToText(initialWeight)) }
     var enabled by remember { mutableStateOf(initialEnabled) }
+
+    val parsedWeight = parseWeight(weightText)
+    val canSave = name.isNotBlank() && parsedWeight != null && parsedWeight > 0.0
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -349,10 +396,10 @@ private fun TaskEditDialog(
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = weightText,
-                    onValueChange = { v -> weightText = v.filter { it.isDigit() } },
+                    onValueChange = { v -> weightText = sanitizeWeightInput(v) },
                     label = { Text(stringResource(R.string.task_weight)) },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -366,10 +413,8 @@ private fun TaskEditDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank() && (weightText.toIntOrNull() ?: 0) > 0,
-                onClick = {
-                    onSave(name, description, weightText.toIntOrNull() ?: 1, enabled)
-                }
+                enabled = canSave,
+                onClick = { onSave(name, description, parsedWeight ?: 1.0, enabled) }
             ) {
                 Text(stringResource(R.string.save))
             }
@@ -417,3 +462,15 @@ private fun DailyMinutesDialog(
         }
     )
 }
+
+private fun sanitizeWeightInput(raw: String): String {
+    val normalized = raw.replace(',', '.').filter { it.isDigit() || it == '.' }
+    val dotIdx = normalized.indexOf('.')
+    return if (dotIdx < 0) normalized
+    else normalized.substring(0, dotIdx + 1) + normalized.substring(dotIdx + 1).filter { it.isDigit() }
+}
+
+private fun parseWeight(text: String): Double? = text.replace(',', '.').toDoubleOrNull()
+
+private fun weightToText(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else "%.2f".format(value).trimEnd('0').trimEnd('.')

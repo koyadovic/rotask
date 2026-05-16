@@ -32,10 +32,10 @@ class TaskScheduler(private val db: AppDatabase) {
                 .filter { it.value.enabled }
                 .map { it.index }
             val sumWeights = enabledIndices.sumOf { tasks[it].weight }
-            if (sumWeights > 0) {
+            if (sumWeights > 0.0) {
                 for (i in enabledIndices) {
                     val t = tasks[i]
-                    val base = totalSecs * t.weight / sumWeights
+                    val base = (totalSecs * t.weight / sumWeights).toLong()
                     val worked = db.workSessionDao().totalForDate(t.id, cur.toString())
                     val newDebt = (t.debtSeconds + base - worked).coerceAtLeast(0)
                     tasks[i] = t.copy(debtSeconds = newDebt)
@@ -58,8 +58,8 @@ class TaskScheduler(private val db: AppDatabase) {
         val totalSecs = settings.dailyMinutes * 60L
         return tasks.map { t ->
             val worked = db.workSessionDao().totalForDate(t.id, today.toString())
-            if (t.enabled && sumWeights > 0) {
-                val base = totalSecs * t.weight / sumWeights
+            if (t.enabled && sumWeights > 0.0) {
+                val base = (totalSecs * t.weight / sumWeights).toLong()
                 val target = base + t.debtSeconds
                 TaskStatus(
                     task = t,

@@ -62,31 +62,33 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         it.copy(showAdd = false, editing = null, deleting = null, showConfig = false)
     }
 
-    fun addTask(name: String, description: String, weight: Int, enabled: Boolean) {
+    fun addTask(name: String, description: String, weight: Double, enabled: Boolean) {
         viewModelScope.launch {
             repo.addTask(
                 name = name.trim(),
                 description = description.trim(),
-                weight = weight.coerceAtLeast(1),
+                weight = sanitizeWeight(weight),
                 enabled = enabled
             )
             dismissDialogs()
         }
     }
 
-    fun updateTask(original: Task, name: String, description: String, weight: Int, enabled: Boolean) {
+    fun updateTask(original: Task, name: String, description: String, weight: Double, enabled: Boolean) {
         viewModelScope.launch {
             repo.updateTask(
                 original.copy(
                     name = name.trim(),
                     description = description.trim(),
-                    weight = weight.coerceAtLeast(1),
+                    weight = sanitizeWeight(weight),
                     enabled = enabled
                 )
             )
             dismissDialogs()
         }
     }
+
+    private fun sanitizeWeight(value: Double): Double = if (value > 0.0) value else 1.0
 
     fun toggleEnabled(task: Task) {
         viewModelScope.launch {
