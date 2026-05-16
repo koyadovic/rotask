@@ -53,3 +53,7 @@ lastSettleDate = hoy
 ```
 
 Hoy, el objetivo efectivo de cada tarea es `base_hoy + deuda_t`. `pickNext()` devuelve la tarea con mayor `objetivo - trabajado_hoy`.
+
+## Licencia
+
+MIT. Ver [LICENSE](LICENSE).
