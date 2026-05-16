@@ -2,6 +2,11 @@
 
 App Android para repartir tu tiempo de trabajo entre varias tareas con pesos configurables, rotando hacia la más atrasada cada vez que pulsas "Iniciar trabajo".
 
+<p align="center">
+  <img src="docs/screenshots/home.jpg" alt="Pantalla principal con la lista de tareas y sus pesos" width="320">
+  <img src="docs/screenshots/work.jpg" alt="Pantalla de sesión de trabajo pausada con los controles Saltar, Detener y Empezar" width="320">
+</p>
+
 ## Idea
 
 - Añades tareas con un nombre, una descripción opcional (qué entrenar) y un peso (entero).
