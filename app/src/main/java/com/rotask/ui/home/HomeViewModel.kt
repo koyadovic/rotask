@@ -25,7 +25,8 @@ data class HomeUiState(
     val deleting: Task? = null,
     val showConfig: Boolean = false,
 ) {
-    val hasWorkRemaining: Boolean get() = statuses.any { it.remainingSecondsToday > 0 }
+    val hasWorkRemaining: Boolean
+        get() = statuses.any { it.task.enabled && it.remainingSecondsToday > 0 }
 }
 
 class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
@@ -61,17 +62,35 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         it.copy(showAdd = false, editing = null, deleting = null, showConfig = false)
     }
 
-    fun addTask(name: String, weight: Int) {
+    fun addTask(name: String, description: String, weight: Int, enabled: Boolean) {
         viewModelScope.launch {
-            repo.addTask(name.trim(), weight.coerceAtLeast(1))
+            repo.addTask(
+                name = name.trim(),
+                description = description.trim(),
+                weight = weight.coerceAtLeast(1),
+                enabled = enabled
+            )
             dismissDialogs()
         }
     }
 
-    fun updateTask(task: Task, newName: String, newWeight: Int) {
+    fun updateTask(original: Task, name: String, description: String, weight: Int, enabled: Boolean) {
         viewModelScope.launch {
-            repo.updateTask(task.copy(name = newName.trim(), weight = newWeight.coerceAtLeast(1)))
+            repo.updateTask(
+                original.copy(
+                    name = name.trim(),
+                    description = description.trim(),
+                    weight = weight.coerceAtLeast(1),
+                    enabled = enabled
+                )
+            )
             dismissDialogs()
+        }
+    }
+
+    fun toggleEnabled(task: Task) {
+        viewModelScope.launch {
+            repo.setEnabled(task, !task.enabled)
         }
     }
 

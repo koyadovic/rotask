@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rotask.R
@@ -58,6 +59,7 @@ fun WorkScreen(
             } else {
                 WorkBody(
                     taskName = state.taskName,
+                    taskDescription = state.taskDescription,
                     elapsedSeconds = state.sessionElapsedSeconds,
                     targetSeconds = state.sessionTargetSeconds,
                     onStop = { vm.stop() }
@@ -70,6 +72,7 @@ fun WorkScreen(
 @Composable
 private fun WorkBody(
     taskName: String,
+    taskDescription: String,
     elapsedSeconds: Long,
     targetSeconds: Long,
     onStop: () -> Unit,
@@ -91,7 +94,17 @@ private fun WorkBody(
                 fontSize = 28.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
             )
+            if (taskDescription.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = taskDescription,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(48.dp))
             Text(
                 text = stringResource(R.string.elapsed),

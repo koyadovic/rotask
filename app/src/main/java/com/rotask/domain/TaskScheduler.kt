@@ -28,9 +28,13 @@ class TaskScheduler(private val db: AppDatabase) {
         val totalSecs = settings.dailyMinutes * 60L
         var cur = last
         while (cur.isBefore(today)) {
-            val sumWeights = tasks.sumOf { it.weight }
+            val enabledIndices = tasks.withIndex()
+                .filter { it.value.enabled }
+                .map { it.index }
+            val sumWeights = enabledIndices.sumOf { tasks[it].weight }
             if (sumWeights > 0) {
-                tasks.forEachIndexed { i, t ->
+                for (i in enabledIndices) {
+                    val t = tasks[i]
                     val base = totalSecs * t.weight / sumWeights
                     val worked = db.workSessionDao().totalForDate(t.id, cur.toString())
                     val newDebt = (t.debtSeconds + base - worked).coerceAtLeast(0)
@@ -40,7 +44,7 @@ class TaskScheduler(private val db: AppDatabase) {
             cur = cur.plusDays(1)
         }
 
-        tasks.forEach { db.taskDao().update(it) }
+        tasks.filter { it.enabled }.forEach { db.taskDao().update(it) }
         db.settingsDao().upsert(settings.copy(lastSettleDate = today.toString()))
     }
 
@@ -49,25 +53,34 @@ class TaskScheduler(private val db: AppDatabase) {
         val settings = db.settingsDao().get() ?: return emptyList()
         val tasks = db.taskDao().getAll()
         if (tasks.isEmpty()) return emptyList()
-        val sumWeights = tasks.sumOf { it.weight }
-        if (sumWeights == 0) return emptyList()
+        val enabledTasks = tasks.filter { it.enabled }
+        val sumWeights = enabledTasks.sumOf { it.weight }
         val totalSecs = settings.dailyMinutes * 60L
         return tasks.map { t ->
-            val base = totalSecs * t.weight / sumWeights
-            val target = base + t.debtSeconds
             val worked = db.workSessionDao().totalForDate(t.id, today.toString())
-            TaskStatus(
-                task = t,
-                targetSecondsToday = target,
-                workedSecondsToday = worked,
-                remainingSecondsToday = (target - worked).coerceAtLeast(0)
-            )
+            if (t.enabled && sumWeights > 0) {
+                val base = totalSecs * t.weight / sumWeights
+                val target = base + t.debtSeconds
+                TaskStatus(
+                    task = t,
+                    targetSecondsToday = target,
+                    workedSecondsToday = worked,
+                    remainingSecondsToday = (target - worked).coerceAtLeast(0)
+                )
+            } else {
+                TaskStatus(
+                    task = t,
+                    targetSecondsToday = 0L,
+                    workedSecondsToday = worked,
+                    remainingSecondsToday = 0L
+                )
+            }
         }
     }
 
     suspend fun pickNext(today: LocalDate): TaskStatus? {
         return computeStatus(today)
-            .filter { it.remainingSecondsToday > 0 }
+            .filter { it.task.enabled && it.remainingSecondsToday > 0 }
             .maxByOrNull { it.remainingSecondsToday }
     }
 

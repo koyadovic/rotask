@@ -36,14 +36,26 @@ class RotaskRepository(
         db.settingsDao().upsert(s.copy(dailyMinutes = minutes))
     }
 
-    suspend fun addTask(name: String, weight: Int) {
+    suspend fun addTask(name: String, description: String, weight: Int, enabled: Boolean) {
         scheduler.ensureSettled(clock())
-        db.taskDao().insert(Task(name = name, weight = weight))
+        db.taskDao().insert(
+            Task(
+                name = name,
+                description = description,
+                weight = weight,
+                enabled = enabled
+            )
+        )
     }
 
     suspend fun updateTask(task: Task) {
         scheduler.ensureSettled(clock())
         db.taskDao().update(task)
+    }
+
+    suspend fun setEnabled(task: Task, enabled: Boolean) {
+        scheduler.ensureSettled(clock())
+        db.taskDao().update(task.copy(enabled = enabled))
     }
 
     suspend fun deleteTask(task: Task) {

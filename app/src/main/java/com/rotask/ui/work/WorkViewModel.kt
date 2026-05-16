@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 data class WorkUiState(
     val loading: Boolean = true,
     val taskName: String = "",
+    val taskDescription: String = "",
     val sessionTargetSeconds: Long = 0L,
     val sessionElapsedSeconds: Long = 0L,
     val finished: Boolean = false,
@@ -46,6 +47,7 @@ class WorkViewModel(
             _state.value = WorkUiState(
                 loading = false,
                 taskName = status.task.name,
+                taskDescription = status.task.description,
                 sessionTargetSeconds = status.remainingSecondsToday,
                 sessionElapsedSeconds = 0L,
                 finished = false,

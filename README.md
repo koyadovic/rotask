@@ -4,11 +4,12 @@ App Android para repartir tu tiempo de trabajo entre varias tareas con pesos con
 
 ## Idea
 
-- Añades tareas con un nombre y un peso (entero).
+- Añades tareas con un nombre, una descripción opcional (qué entrenar) y un peso (entero).
+- Cada tarea puede estar **activa** o **pausada**. Las pausadas no rotan pero siguen visibles y conservan su deuda.
 - Configuras minutos por día.
-- Cada tarea recibe un objetivo diario proporcional a su peso. Ej: 4 tareas de pesos 2/1/1/1 con 60 min/día → 24/12/12/12 min.
-- Al pulsar **Iniciar trabajo** se elige la tarea con más segundos pendientes hoy y arranca un contador hasta cumplir su objetivo.
-- Si un día no llegas al objetivo, el déficit se acarrea y se suma al objetivo del día siguiente. Trabajar de más no genera crédito.
+- Cada tarea activa recibe un objetivo diario proporcional a su peso, repartido sobre la suma de pesos de las activas. Ej: 4 tareas activas de pesos 2/1/1/1 con 60 min/día → 24/12/12/12 min.
+- Al pulsar **Iniciar trabajo** se elige la tarea activa con más segundos pendientes hoy y arranca un contador hasta cumplir su objetivo.
+- Si un día no llegas al objetivo, el déficit se acarrea y se suma al objetivo del día siguiente. Trabajar de más no genera crédito. Las tareas pausadas no acumulan déficit nuevo.
 
 ## Stack
 

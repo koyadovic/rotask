@@ -12,7 +12,10 @@
     <string name="edit_task">Editar tarea</string>
     <string name="delete_task">Eliminar tarea</string>
     <string name="task_name">Nombre</string>
+    <string name="task_description">Descripción (qué entrenar)</string>
     <string name="task_weight">Peso</string>
+    <string name="task_enabled">Activa en la rotación</string>
+    <string name="task_paused">Pausada</string>
     <string name="save">Guardar</string>
     <string name="cancel">Cancelar</string>
     <string name="delete">Eliminar</string>
