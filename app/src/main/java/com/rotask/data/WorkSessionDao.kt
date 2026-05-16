@@ -3,6 +3,7 @@ package com.rotask.data
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WorkSessionDao {
@@ -11,6 +12,9 @@ interface WorkSessionDao {
 
     @Query("SELECT IFNULL(SUM(durationSeconds), 0) FROM work_sessions WHERE taskId = :taskId AND date = :date")
     suspend fun totalForDate(taskId: Long, date: String): Long
+
+    @Query("SELECT COUNT(*) FROM work_sessions")
+    fun observeCount(): Flow<Int>
 
     @Query("DELETE FROM work_sessions WHERE taskId = :taskId")
     suspend fun deleteForTask(taskId: Long)

@@ -13,6 +13,7 @@ class RotaskRepository(
 
     fun observeTasks() = db.taskDao().observeAll()
     fun observeSettings() = db.settingsDao().observe()
+    fun observeWorkSessionsTick() = db.workSessionDao().observeCount()
 
     suspend fun bootstrap() {
         if (db.settingsDao().get() == null) {

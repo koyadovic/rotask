@@ -40,9 +40,11 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
     init {
         viewModelScope.launch {
             repo.bootstrap()
-            combine(repo.observeTasks(), repo.observeSettings()) { tasks, settings ->
-                tasks to settings
-            }.collect { (_, settings) ->
+            combine(
+                repo.observeTasks(),
+                repo.observeSettings(),
+                repo.observeWorkSessionsTick(),
+            ) { _, settings, _ -> settings }.collect { settings ->
                 val status = repo.status()
                 _uiState.update {
                     it.copy(
