@@ -1,39 +1,40 @@
 # Rotask
 
-App Android para repartir tu tiempo de trabajo entre varias tareas con pesos configurables, rotando hacia la más atrasada cada vez que pulsas "Iniciar trabajo".
+Android app to split your working time across several tasks with configurable weights, rotating toward the most behind one every time you press "Start work".
 
 <p align="center">
-  <img src="docs/screenshots/home.jpg" alt="Pantalla principal con la lista de tareas y sus pesos" width="320">
-  <img src="docs/screenshots/work.jpg" alt="Pantalla de sesión de trabajo pausada con los controles Saltar, Detener y Empezar" width="320">
+  <img src="docs/screenshots/home.jpg" alt="Home screen with the task list and their weights" width="320">
+  <img src="docs/screenshots/work.jpg" alt="Paused work session screen with Skip, Stop and Start controls" width="320">
 </p>
 
 ## Idea
 
-- Añades tareas con un nombre, una descripción opcional (qué entrenar) y un peso (entero).
-- Cada tarea puede estar **activa** o **pausada**. Las pausadas no rotan pero siguen visibles y conservan su deuda.
-- Configuras minutos por día.
-- Cada tarea activa recibe un objetivo diario proporcional a su peso, repartido sobre la suma de pesos de las activas. Ej: 4 tareas activas de pesos 2/1/1/1 con 60 min/día → 24/12/12/12 min.
-- Al pulsar **Iniciar trabajo** se elige la tarea activa con más segundos pendientes hoy y arranca un contador hasta cumplir su objetivo.
-- Si un día no llegas al objetivo, el déficit se acarrea y se suma al objetivo del día siguiente. Trabajar de más no genera crédito. Las tareas pausadas no acumulan déficit nuevo.
+- You add tasks with a name, an optional description (what to train) and a weight (decimal).
+- Each task can be **active** or **paused**. Paused tasks don't rotate but remain visible and keep their debt.
+- You configure minutes per day.
+- Each active task gets a daily target proportional to its weight, divided over the sum of active weights. Example: 4 active tasks with weights 2/1/1/1 and 60 min/day → 24/12/12/12 min.
+- When you press **Start work** the app picks the active task with the most pending seconds today and opens a session paused. You press play when you're ready.
+- When a session reaches its target (or you press Skip) the next-most-behind active task is loaded already paused, so you control when the next session starts.
+- If you don't reach the daily target, the deficit carries over and is added to the next day's target. Working over the target doesn't generate credit. Paused tasks don't accumulate new deficit.
 
 ## Stack
 
 - Kotlin 2.0 + Jetpack Compose (Material 3)
-- Room para persistencia local
+- Room for local persistence
 - Navigation Compose
 - minSdk 26, targetSdk 35
 
-## Estructura
+## Project layout
 
 ```
 app/src/main/java/com/rotask/
-├── data/        Entidades + DAOs + AppDatabase (Room)
-├── domain/      TaskScheduler (settle + pick) y RotaskRepository
+├── data/        Entities + DAOs + AppDatabase (Room) + Migrations
+├── domain/      TaskScheduler (settle + pick) and RotaskRepository
 └── ui/
     ├── home/    HomeScreen + HomeViewModel
     ├── work/    WorkScreen + WorkViewModel
-    ├── theme/   Colores, tipografía, Theme
-    └── format/  Helpers de formateo (mm:ss)
+    ├── theme/   Colors, typography, Theme
+    └── format/  Formatting helpers (mm:ss, weights)
 ```
 
 ## Build
@@ -42,23 +43,27 @@ app/src/main/java/com/rotask/
 ./gradlew assembleDebug
 ```
 
-Recomendado: abrir el proyecto en Android Studio (Hedgehog+) y dejar que sincronice Gradle la primera vez.
+Recommended: open the project in Android Studio (Hedgehog+) and let it sync Gradle the first time.
 
-## Algoritmo (resumen)
+## Localization
 
-`debtSeconds` por tarea acumula lo que se debe trabajar de días anteriores. Al pasar la medianoche, `ensureSettled` re-juega los días pendientes:
+Default language is English (`res/values`). Spanish translation lives in `res/values-es`. The system picks the user's locale automatically.
+
+## Algorithm (summary)
+
+`debtSeconds` on each task accumulates what's owed from previous days. When the date rolls over, `ensureSettled` replays the missed days:
 
 ```
-para cada día d entre lastSettleDate y hoy:
-  para cada tarea t:
-    base   = dailyMinutes * 60 * peso_t / suma_pesos
-    hecho  = trabajado en t durante d
-    deuda_t = max(0, deuda_t + base - hecho)
-lastSettleDate = hoy
+for each day d between lastSettleDate and today:
+  for each active task t:
+    base   = dailyMinutes * 60 * weight_t / sum_active_weights
+    done   = seconds worked on t during d
+    debt_t = max(0, debt_t + base - done)
+lastSettleDate = today
 ```
 
-Hoy, el objetivo efectivo de cada tarea es `base_hoy + deuda_t`. `pickNext()` devuelve la tarea con mayor `objetivo - trabajado_hoy`.
+Today, each task's effective target is `base_today + debt_t`. `pickNext()` returns the active task with the largest `target - worked_today`.
 
-## Licencia
+## License
 
-MIT. Ver [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
