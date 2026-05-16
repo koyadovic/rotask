@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -382,7 +383,10 @@ private fun TaskEditDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text(stringResource(R.string.task_name)) },
-                    singleLine = true
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences
+                    ),
                 )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
@@ -392,6 +396,9 @@ private fun TaskEditDialog(
                     minLines = 2,
                     maxLines = 5,
                     modifier = Modifier.heightIn(min = 88.dp),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences
+                    ),
                 )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(

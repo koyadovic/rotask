@@ -9,10 +9,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TaskDao {
-    @Query("SELECT * FROM tasks ORDER BY id")
+    @Query("SELECT * FROM tasks ORDER BY name COLLATE NOCASE")
     fun observeAll(): Flow<List<Task>>
 
-    @Query("SELECT * FROM tasks ORDER BY id")
+    @Query("SELECT * FROM tasks ORDER BY name COLLATE NOCASE")
     suspend fun getAll(): List<Task>
 
     @Query("SELECT * FROM tasks WHERE id = :id")
