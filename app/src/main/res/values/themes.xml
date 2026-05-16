@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Rotask" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/rotask_blue</item>
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
         <item name="android:statusBarColor">@color/rotask_blue</item>
         <item name="android:navigationBarColor">@color/rotask_blue</item>
+        <item name="android:windowSplashScreenBackground">@color/ic_launcher_background</item>
     </style>
 </resources>
