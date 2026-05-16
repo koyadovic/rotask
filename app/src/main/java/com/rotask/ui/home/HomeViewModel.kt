@@ -5,9 +5,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.rotask.data.Group
 import com.rotask.data.Task
+import com.rotask.domain.GroupStatus
 import com.rotask.domain.RotaskRepository
-import com.rotask.domain.TaskStatus
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,16 +19,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
-    val dailyMinutes: Int = 60,
-    val statuses: List<TaskStatus> = emptyList(),
-    val showAdd: Boolean = false,
-    val editing: Task? = null,
-    val deleting: Task? = null,
-    val showConfig: Boolean = false,
-) {
-    val hasWorkRemaining: Boolean
-        get() = statuses.any { it.task.enabled && it.remainingSecondsToday > 0 }
-}
+    val groups: List<GroupStatus> = emptyList(),
+    val addingTaskFor: Group? = null,
+    val editingTask: Task? = null,
+    val deletingTask: Task? = null,
+    val showAddGroup: Boolean = false,
+    val editingGroup: Group? = null,
+    val deletingGroup: Group? = null,
+)
 
 class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
 
@@ -41,36 +40,75 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         viewModelScope.launch {
             repo.bootstrap()
             combine(
+                repo.observeGroups(),
                 repo.observeTasks(),
-                repo.observeSettings(),
                 repo.observeWorkSessionsTick(),
-            ) { _, settings, _ -> settings }.collect { settings ->
-                val status = repo.status()
-                _uiState.update {
-                    it.copy(
-                        dailyMinutes = settings?.dailyMinutes ?: 60,
-                        statuses = status
-                    )
-                }
+            ) { _, _, _ -> Unit }.collect {
+                val groups = repo.groupStatuses()
+                _uiState.update { it.copy(groups = groups) }
             }
         }
     }
 
-    fun showAddDialog() = _uiState.update { it.copy(showAdd = true) }
-    fun showConfigDialog() = _uiState.update { it.copy(showConfig = true) }
-    fun startEditing(task: Task) = _uiState.update { it.copy(editing = task) }
-    fun startDeleting(task: Task) = _uiState.update { it.copy(deleting = task) }
+    // ---- Dialog state ----
+
+    fun showAddGroupDialog() = _uiState.update { it.copy(showAddGroup = true) }
+    fun startEditingGroup(group: Group) = _uiState.update { it.copy(editingGroup = group) }
+    fun startDeletingGroup(group: Group) = _uiState.update { it.copy(deletingGroup = group) }
+
+    fun showAddTaskFor(group: Group) = _uiState.update { it.copy(addingTaskFor = group) }
+    fun startEditingTask(task: Task) = _uiState.update { it.copy(editingTask = task) }
+    fun startDeletingTask(task: Task) = _uiState.update { it.copy(deletingTask = task) }
+
     fun dismissDialogs() = _uiState.update {
-        it.copy(showAdd = false, editing = null, deleting = null, showConfig = false)
+        it.copy(
+            showAddGroup = false,
+            editingGroup = null,
+            deletingGroup = null,
+            addingTaskFor = null,
+            editingTask = null,
+            deletingTask = null,
+        )
     }
 
-    fun addTask(name: String, description: String, weight: Double, enabled: Boolean) {
+    // ---- Group actions ----
+
+    fun addGroup(name: String, dailyMinutes: Int) {
+        viewModelScope.launch {
+            repo.addGroup(name, dailyMinutes)
+            dismissDialogs()
+        }
+    }
+
+    fun updateGroup(original: Group, name: String, dailyMinutes: Int) {
+        viewModelScope.launch {
+            repo.updateGroup(
+                original.copy(
+                    name = name.trim(),
+                    dailyMinutes = dailyMinutes.coerceAtLeast(1),
+                )
+            )
+            dismissDialogs()
+        }
+    }
+
+    fun deleteGroup(group: Group) {
+        viewModelScope.launch {
+            repo.deleteGroup(group)
+            dismissDialogs()
+        }
+    }
+
+    // ---- Task actions ----
+
+    fun addTask(groupId: Long, name: String, description: String, weight: Double, enabled: Boolean) {
         viewModelScope.launch {
             repo.addTask(
+                groupId = groupId,
                 name = name.trim(),
                 description = description.trim(),
                 weight = sanitizeWeight(weight),
-                enabled = enabled
+                enabled = enabled,
             )
             dismissDialogs()
         }
@@ -83,14 +121,12 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                     name = name.trim(),
                     description = description.trim(),
                     weight = sanitizeWeight(weight),
-                    enabled = enabled
+                    enabled = enabled,
                 )
             )
             dismissDialogs()
         }
     }
-
-    private fun sanitizeWeight(value: Double): Double = if (value > 0.0) value else 1.0
 
     fun toggleEnabled(task: Task) {
         viewModelScope.launch {
@@ -105,19 +141,16 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         }
     }
 
-    fun setDailyMinutes(minutes: Int) {
-        viewModelScope.launch {
-            repo.setDailyMinutes(minutes.coerceAtLeast(1))
-            dismissDialogs()
-        }
-    }
+    // ---- Work ----
 
-    fun startWork() {
+    fun startWorkInGroup(groupId: Long) {
         viewModelScope.launch {
-            val taskId = repo.pickNext()?.task?.id ?: return@launch
+            val taskId = repo.pickNextInGroup(groupId)?.task?.id ?: return@launch
             _navToWork.send(taskId)
         }
     }
+
+    private fun sanitizeWeight(value: Double): Double = if (value > 0.0) value else 1.0
 
     companion object {
         fun factory(repo: RotaskRepository): ViewModelProvider.Factory = viewModelFactory {

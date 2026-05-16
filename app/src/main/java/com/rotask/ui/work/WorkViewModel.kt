@@ -37,6 +37,7 @@ class WorkViewModel(
     val state: StateFlow<WorkUiState> = _state.asStateFlow()
 
     private var currentTaskId: Long = initialTaskId
+    private var currentGroupId: Long = 0L
     private var timerJob: Job? = null
     private val persisted = AtomicBoolean(false)
 
@@ -53,6 +54,7 @@ class WorkViewModel(
             return
         }
         currentTaskId = taskId
+        currentGroupId = status.task.groupId
         if (resetPersistFlag) persisted.set(false)
         _state.value = WorkUiState(
             loading = false,
@@ -87,13 +89,14 @@ class WorkViewModel(
     private fun advanceToNext(reason: AdvanceReason) {
         timerJob?.cancel()
         val finishedTaskId = currentTaskId
+        val groupId = currentGroupId
         val elapsed = _state.value.sessionElapsedSeconds
         viewModelScope.launch {
             if (elapsed > 0) {
                 repo.recordWork(finishedTaskId, elapsed)
             }
             persisted.set(true)
-            val next = repo.pickNextExcluding(finishedTaskId)
+            val next = repo.pickNextInGroupExcluding(groupId, finishedTaskId)
             if (next == null) {
                 _state.update { it.copy(finished = true) }
                 return@launch

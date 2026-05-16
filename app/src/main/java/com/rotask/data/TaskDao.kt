@@ -15,6 +15,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks ORDER BY name COLLATE NOCASE")
     suspend fun getAll(): List<Task>
 
+    @Query("SELECT * FROM tasks WHERE groupId = :groupId ORDER BY name COLLATE NOCASE")
+    suspend fun getAllInGroup(groupId: Long): List<Task>
+
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun get(id: Long): Task?
 

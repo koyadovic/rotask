@@ -20,20 +20,18 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -59,6 +57,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rotask.R
+import com.rotask.data.Group
+import com.rotask.domain.GroupStatus
 import com.rotask.domain.TaskStatus
 import com.rotask.ui.format.formatClock
 import com.rotask.ui.format.formatWeight
@@ -67,7 +67,7 @@ import com.rotask.ui.format.formatWeight
 @Composable
 fun HomeScreen(
     vm: HomeViewModel,
-    onStartWork: (Long) -> Unit
+    onStartWork: (Long) -> Unit,
 ) {
     val state by vm.uiState.collectAsState()
 
@@ -79,79 +79,93 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.home_title)) },
-                actions = {
-                    TextButton(onClick = { vm.showConfigDialog() }) {
-                        Icon(Icons.Filled.Schedule, contentDescription = null)
-                        Spacer(Modifier.size(6.dp))
-                        Text(stringResource(R.string.daily_minutes_value, state.dailyMinutes))
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
-                )
+                ),
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(padding),
         ) {
-            Box(modifier = Modifier.weight(1f)) {
-                if (state.statuses.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            stringResource(R.string.empty_tasks),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(state.statuses, key = { it.task.id }) { status ->
-                            TaskRow(
-                                status = status,
-                                onToggleEnabled = { vm.toggleEnabled(status.task) },
-                                onEdit = { vm.startEditing(status.task) },
-                                onDelete = { vm.startDeleting(status.task) }
+            if (state.groups.isEmpty()) {
+                EmptyState(onAddGroup = { vm.showAddGroupDialog() })
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    state.groups.forEach { groupStatus ->
+                        item(key = "header-${groupStatus.group.id}") {
+                            GroupHeader(
+                                status = groupStatus,
+                                onEdit = { vm.startEditingGroup(groupStatus.group) },
+                                onDelete = { vm.startDeletingGroup(groupStatus.group) },
                             )
                         }
+                        items(
+                            groupStatus.statuses,
+                            key = { "task-${it.task.id}" },
+                        ) { taskStatus ->
+                            Spacer(Modifier.height(8.dp))
+                            TaskRow(
+                                status = taskStatus,
+                                onToggleEnabled = { vm.toggleEnabled(taskStatus.task) },
+                                onEdit = { vm.startEditingTask(taskStatus.task) },
+                                onDelete = { vm.startDeletingTask(taskStatus.task) },
+                            )
+                        }
+                        if (groupStatus.statuses.isEmpty()) {
+                            item(key = "empty-${groupStatus.group.id}") {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.group_empty),
+                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                                    fontStyle = FontStyle.Italic,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
+                        item(key = "actions-${groupStatus.group.id}") {
+                            Spacer(Modifier.height(10.dp))
+                            GroupActions(
+                                canStartWork = groupStatus.hasWorkRemaining,
+                                onAddTask = { vm.showAddTaskFor(groupStatus.group) },
+                                onStartWork = { vm.startWorkInGroup(groupStatus.group.id) },
+                            )
+                            Spacer(Modifier.height(24.dp))
+                        }
+                    }
+                    item(key = "add-group") {
+                        AddGroupButton(onClick = { vm.showAddGroupDialog() })
+                        Spacer(Modifier.height(16.dp))
                     }
                 }
             }
-
-            BottomBar(
-                startEnabled = state.hasWorkRemaining,
-                onStartWork = { vm.startWork() },
-                onAdd = { vm.showAddDialog() }
-            )
         }
     }
 
-    if (state.showAdd) {
+    // Dialogs
+
+    state.addingTaskFor?.let { group ->
         TaskEditDialog(
-            title = stringResource(R.string.add_task),
+            title = stringResource(R.string.add_task_in, group.name),
             initialName = "",
             initialDescription = "",
             initialWeight = 1.0,
             initialEnabled = true,
             onSave = { name, description, weight, enabled ->
-                vm.addTask(name, description, weight, enabled)
+                vm.addTask(group.id, name, description, weight, enabled)
             },
-            onCancel = { vm.dismissDialogs() }
+            onCancel = { vm.dismissDialogs() },
         )
     }
 
-    state.editing?.let { task ->
+    state.editingTask?.let { task ->
         TaskEditDialog(
             title = stringResource(R.string.edit_task),
             initialName = task.name,
@@ -161,11 +175,11 @@ fun HomeScreen(
             onSave = { name, description, weight, enabled ->
                 vm.updateTask(task, name, description, weight, enabled)
             },
-            onCancel = { vm.dismissDialogs() }
+            onCancel = { vm.dismissDialogs() },
         )
     }
 
-    state.deleting?.let { task ->
+    state.deletingTask?.let { task ->
         AlertDialog(
             onDismissRequest = { vm.dismissDialogs() },
             title = { Text(stringResource(R.string.delete_task)) },
@@ -179,17 +193,121 @@ fun HomeScreen(
                 TextButton(onClick = { vm.dismissDialogs() }) {
                     Text(stringResource(R.string.cancel))
                 }
-            }
+            },
         )
     }
 
-    if (state.showConfig) {
-        DailyMinutesDialog(
-            initialMinutes = state.dailyMinutes,
-            onSave = { vm.setDailyMinutes(it) },
-            onCancel = { vm.dismissDialogs() }
+    if (state.showAddGroup) {
+        GroupEditDialog(
+            title = stringResource(R.string.add_group),
+            initialName = "",
+            initialDailyMinutes = 60,
+            onSave = { name, minutes -> vm.addGroup(name, minutes) },
+            onCancel = { vm.dismissDialogs() },
         )
     }
+
+    state.editingGroup?.let { group ->
+        GroupEditDialog(
+            title = stringResource(R.string.edit_group),
+            initialName = group.name,
+            initialDailyMinutes = group.dailyMinutes,
+            onSave = { name, minutes -> vm.updateGroup(group, name, minutes) },
+            onCancel = { vm.dismissDialogs() },
+        )
+    }
+
+    state.deletingGroup?.let { group ->
+        val statuses = state.groups.firstOrNull { it.group.id == group.id }?.statuses.orEmpty()
+        AlertDialog(
+            onDismissRequest = { vm.dismissDialogs() },
+            title = { Text(stringResource(R.string.delete_group)) },
+            text = {
+                Text(
+                    if (statuses.isEmpty()) {
+                        stringResource(R.string.delete_group_confirm_empty, group.name)
+                    } else {
+                        stringResource(R.string.delete_group_confirm_with_tasks, group.name, statuses.size)
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteGroup(group) }) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissDialogs() }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun EmptyState(onAddGroup: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.empty_groups),
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Spacer(Modifier.height(24.dp))
+        Button(onClick = onAddGroup) {
+            Icon(Icons.Filled.Add, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text(stringResource(R.string.add_group))
+        }
+    }
+}
+
+@Composable
+private fun GroupHeader(
+    status: GroupStatus,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = status.group.name,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                text = stringResource(R.string.daily_minutes_value, status.group.dailyMinutes),
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.Edit,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Spacer(Modifier.size(4.dp))
+        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+    Spacer(Modifier.height(6.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.surface)
 }
 
 @Composable
@@ -207,7 +325,7 @@ private fun TaskRow(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -233,7 +351,7 @@ private fun TaskRow(
                 Text(
                     text = formatWeight(status.task.weight),
                     color = if (enabled) MaterialTheme.colorScheme.primary else secondaryColor,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.size(8.dp))
                 Switch(checked = enabled, onCheckedChange = { onToggleEnabled() })
@@ -249,7 +367,7 @@ private fun TaskRow(
                     progress = { progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
+                        .height(6.dp),
                 )
                 Spacer(Modifier.height(4.dp))
             }
@@ -269,10 +387,7 @@ private fun TaskRow(
                     color = if (enabled) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(32.dp),
-                ) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
                     Icon(
                         Icons.Filled.Edit,
                         contentDescription = null,
@@ -281,10 +396,7 @@ private fun TaskRow(
                     )
                 }
                 Spacer(Modifier.size(4.dp))
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp),
-                ) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = null,
@@ -298,62 +410,111 @@ private fun TaskRow(
 }
 
 @Composable
-private fun BottomBar(
-    startEnabled: Boolean,
+private fun GroupActions(
+    canStartWork: Boolean,
+    onAddTask: () -> Unit,
     onStartWork: () -> Unit,
-    onAdd: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.surface)
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        OutlinedButton(
+            onClick = onAddTask,
+            modifier = Modifier.height(52.dp),
         ) {
-            Button(
-                onClick = onStartWork,
-                enabled = startEnabled,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(64.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                Spacer(Modifier.size(8.dp))
-                Text(
-                    text = if (startEnabled) {
-                        stringResource(R.string.start_work)
-                    } else {
-                        stringResource(R.string.all_done_today)
-                    },
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-            FilledTonalIconButton(
-                onClick = onAdd,
-                modifier = Modifier.size(64.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                ),
-            ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = stringResource(R.string.add_task),
-                    modifier = Modifier.size(28.dp),
-                )
-            }
+            Icon(Icons.Filled.Add, contentDescription = null)
+            Spacer(Modifier.size(6.dp))
+            Text(stringResource(R.string.add_task_short))
+        }
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = onStartWork,
+            enabled = canStartWork,
+            modifier = Modifier.height(52.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+        ) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = null)
+            Spacer(Modifier.size(6.dp))
+            Text(
+                text = if (canStartWork) stringResource(R.string.start_work)
+                else stringResource(R.string.all_done_today),
+                fontWeight = FontWeight.Bold,
+            )
         }
     }
+}
+
+@Composable
+private fun AddGroupButton(onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp),
+    ) {
+        Icon(Icons.Filled.Add, contentDescription = null)
+        Spacer(Modifier.size(6.dp))
+        Text(stringResource(R.string.add_group))
+    }
+}
+
+@Composable
+private fun GroupEditDialog(
+    title: String,
+    initialName: String,
+    initialDailyMinutes: Int,
+    onSave: (name: String, dailyMinutes: Int) -> Unit,
+    onCancel: () -> Unit,
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var minutesText by remember { mutableStateOf(initialDailyMinutes.toString()) }
+
+    val parsedMinutes = minutesText.toIntOrNull()
+    val canSave = name.isNotBlank() && parsedMinutes != null && parsedMinutes > 0
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.group_name)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences
+                    ),
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = minutesText,
+                    onValueChange = { v -> minutesText = v.filter { it.isDigit() } },
+                    label = { Text(stringResource(R.string.minutes_per_day)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canSave,
+                onClick = { onSave(name, parsedMinutes ?: 1) },
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -364,7 +525,7 @@ private fun TaskEditDialog(
     initialWeight: Double,
     initialEnabled: Boolean,
     onSave: (name: String, description: String, weight: Double, enabled: Boolean) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
     var description by remember { mutableStateOf(initialDescription) }
@@ -406,7 +567,7 @@ private fun TaskEditDialog(
                     onValueChange = { v -> weightText = sanitizeWeightInput(v) },
                     label = { Text(stringResource(R.string.task_weight)) },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -421,7 +582,7 @@ private fun TaskEditDialog(
         confirmButton = {
             TextButton(
                 enabled = canSave,
-                onClick = { onSave(name, description, parsedWeight ?: 1.0, enabled) }
+                onClick = { onSave(name, description, parsedWeight ?: 1.0, enabled) },
             ) {
                 Text(stringResource(R.string.save))
             }
@@ -430,43 +591,7 @@ private fun TaskEditDialog(
             TextButton(onClick = onCancel) {
                 Text(stringResource(R.string.cancel))
             }
-        }
-    )
-}
-
-@Composable
-private fun DailyMinutesDialog(
-    initialMinutes: Int,
-    onSave: (Int) -> Unit,
-    onCancel: () -> Unit
-) {
-    var text by remember { mutableStateOf(initialMinutes.toString()) }
-
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(stringResource(R.string.config_title)) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { v -> text = v.filter { it.isDigit() } },
-                label = { Text(stringResource(R.string.minutes_per_day)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
         },
-        confirmButton = {
-            TextButton(
-                enabled = (text.toIntOrNull() ?: 0) > 0,
-                onClick = { onSave(text.toIntOrNull() ?: 1) }
-            ) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text(stringResource(R.string.cancel))
-            }
-        }
     )
 }
 
@@ -480,4 +605,5 @@ private fun sanitizeWeightInput(raw: String): String {
 private fun parseWeight(text: String): Double? = text.replace(',', '.').toDoubleOrNull()
 
 private fun weightToText(value: Double): String =
-    if (value == value.toLong().toDouble()) value.toLong().toString() else "%.2f".format(value).trimEnd('0').trimEnd('.')
+    if (value == value.toLong().toDouble()) value.toLong().toString()
+    else "%.2f".format(value).trimEnd('0').trimEnd('.')

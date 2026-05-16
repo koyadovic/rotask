@@ -6,14 +6,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [Task::class, WorkSession::class, SettingsEntity::class],
-    version = 4,
+    entities = [Group::class, Task::class, WorkSession::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun groupDao(): GroupDao
     abstract fun taskDao(): TaskDao
     abstract fun workSessionDao(): WorkSessionDao
-    abstract fun settingsDao(): SettingsDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -25,7 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "rotask.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }
