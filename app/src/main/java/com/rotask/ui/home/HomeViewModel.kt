@@ -150,6 +150,15 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         }
     }
 
+    /** Recompute statuses against the current clock. Called from onResume so a day rollover
+     *  invalidates the snapshot the Flow already emitted while the app was in background. */
+    fun refresh() {
+        viewModelScope.launch {
+            val groups = repo.groupStatuses()
+            _uiState.update { it.copy(groups = groups) }
+        }
+    }
+
     private fun sanitizeWeight(value: Double): Double = if (value > 0.0) value else 1.0
 
     companion object {

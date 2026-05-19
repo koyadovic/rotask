@@ -66,15 +66,15 @@ class TaskScheduler(private val db: AppDatabase) {
         today: LocalDate,
         excludeTaskId: Long? = null,
     ): TaskStatus? {
-        val statuses = computeGroupStatuses(today)
+        val candidates = computeGroupStatuses(today)
             .firstOrNull { it.group.id == groupId }
             ?.statuses
+            ?.filter { it.task.enabled && it.remainingSecondsToday > 0 && it.task.id != excludeTaskId }
             ?: return null
-        return statuses
-            .asSequence()
-            .filter { it.task.enabled && it.remainingSecondsToday > 0 && it.task.id != excludeTaskId }
-            .sortedWith(MOST_INCOMPLETE_FIRST)
-            .firstOrNull()
+        if (candidates.isEmpty()) return null
+        val maxPct = candidates.maxOf { it.percentIncomplete }
+        val topTier = candidates.filter { it.percentIncomplete >= maxPct - PCT_EPSILON }
+        return topTier.random()
     }
 
     suspend fun recordWork(taskId: Long, seconds: Long, today: LocalDate) {
@@ -85,14 +85,7 @@ class TaskScheduler(private val db: AppDatabase) {
     }
 
     companion object {
-        /**
-         * Higher percentIncomplete first; on ties, larger remaining wins so we still
-         * make progress on heavier tasks once everything is at the same ratio.
-         */
-        private val MOST_INCOMPLETE_FIRST = Comparator<TaskStatus> { a, b ->
-            val byPct = b.percentIncomplete.compareTo(a.percentIncomplete)
-            if (byPct != 0) byPct
-            else b.remainingSecondsToday.compareTo(a.remainingSecondsToday)
-        }
+        /** Tolerance for considering two percent-incomplete values equal (treated as a tie). */
+        private const val PCT_EPSILON = 1e-9
     }
 }

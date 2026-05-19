@@ -32,7 +32,12 @@ fun RotaskNavHost(application: RotaskApplication) {
         ) { entry ->
             val taskId = entry.arguments?.getLong("taskId") ?: 0L
             val vm: WorkViewModel = viewModel(
-                factory = WorkViewModel.factory(application.repository, application.appScope, taskId)
+                factory = WorkViewModel.factory(
+                    application.repository,
+                    application.appScope,
+                    application.soundPlayer,
+                    taskId,
+                )
             )
             WorkScreen(
                 vm = vm,

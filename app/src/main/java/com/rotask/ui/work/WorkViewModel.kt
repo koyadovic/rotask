@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.rotask.audio.SoundPlayer
 import com.rotask.domain.RotaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -30,6 +31,7 @@ data class WorkUiState(
 class WorkViewModel(
     private val repo: RotaskRepository,
     private val appScope: CoroutineScope,
+    private val soundPlayer: SoundPlayer,
     initialTaskId: Long,
 ) : ViewModel() {
 
@@ -88,6 +90,9 @@ class WorkViewModel(
 
     private fun advanceToNext(reason: AdvanceReason) {
         timerJob?.cancel()
+        if (reason == AdvanceReason.AUTO_COMPLETED) {
+            soundPlayer.playTaskCompleted()
+        }
         val finishedTaskId = currentTaskId
         val groupId = currentGroupId
         val elapsed = _state.value.sessionElapsedSeconds
@@ -149,9 +154,10 @@ class WorkViewModel(
         fun factory(
             repo: RotaskRepository,
             appScope: CoroutineScope,
-            taskId: Long
+            soundPlayer: SoundPlayer,
+            taskId: Long,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { WorkViewModel(repo, appScope, taskId) }
+            initializer { WorkViewModel(repo, appScope, soundPlayer, taskId) }
         }
     }
 }
