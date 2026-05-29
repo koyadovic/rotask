@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import com.rotask.RotaskApplication
 import com.rotask.ui.home.HomeScreen
 import com.rotask.ui.home.HomeViewModel
+import com.rotask.ui.work.WorkMode
 import com.rotask.ui.work.WorkScreen
 import com.rotask.ui.work.WorkViewModel
 
@@ -19,24 +20,37 @@ fun RotaskNavHost(application: RotaskApplication) {
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             val vm: HomeViewModel = viewModel(
-                factory = HomeViewModel.factory(application.repository)
+                factory = HomeViewModel.factory(
+                    application.repository,
+                    application.soundSettings,
+                    application.soundPlayer,
+                )
             )
             HomeScreen(
                 vm = vm,
-                onStartWork = { taskId -> navController.navigate("work/$taskId") }
+                onStartWork = { start -> navController.navigate("work/${start.taskId}/${start.mode.name}") }
             )
         }
         composable(
-            route = "work/{taskId}",
-            arguments = listOf(navArgument("taskId") { type = NavType.LongType })
+            route = "work/{taskId}/{mode}",
+            arguments = listOf(
+                navArgument("taskId") { type = NavType.LongType },
+                navArgument("mode") { type = NavType.StringType },
+            )
         ) { entry ->
             val taskId = entry.arguments?.getLong("taskId") ?: 0L
+            val mode = entry.arguments
+                ?.getString("mode")
+                ?.let { runCatching { WorkMode.valueOf(it) }.getOrNull() }
+                ?: WorkMode.ROTATION
             val vm: WorkViewModel = viewModel(
                 factory = WorkViewModel.factory(
                     application.repository,
                     application.appScope,
                     application.soundPlayer,
+                    application.completionAlarmScheduler,
                     taskId,
+                    mode,
                 )
             )
             WorkScreen(

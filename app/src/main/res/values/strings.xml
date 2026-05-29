@@ -25,6 +25,8 @@
     <string name="task_weight">Weight</string>
     <string name="task_enabled">Active in rotation</string>
     <string name="task_paused">Paused</string>
+    <string name="show_disabled_tasks">Show disabled (%1$d)</string>
+    <string name="hide_disabled_tasks">Hide disabled (%1$d)</string>
 
     <string name="start_work">Start work</string>
     <string name="all_done_today">All done for today</string>
@@ -32,6 +34,7 @@
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
+    <string name="done">Done</string>
 
     <string name="work_title">Working</string>
     <string name="stop_work">Stop</string>
@@ -41,4 +44,13 @@
     <string name="skip_work">Skip</string>
     <string name="elapsed">Elapsed</string>
     <string name="target">Today\'s target</string>
+    <string name="start_single_task">Start only this task</string>
+    <string name="mark_task_done">Mark task complete</string>
+
+    <string name="sound_settings">Completion sound</string>
+    <string name="preview_sound">Preview</string>
+    <string name="sound_off">Silent</string>
+    <string name="sound_notification">Default notification</string>
+    <string name="sound_alarm">Default alarm</string>
+    <string name="sound_ringtone">Default ringtone</string>
 </resources>

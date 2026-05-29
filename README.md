@@ -11,10 +11,14 @@ Android app to split your daily training time across grouped tasks with configur
 
 - **Groups** organize work by topic (e.g. *Music*, *Programming*). Each group owns its own daily minutes budget.
 - **Tasks** belong to a group. Each task has a name, an optional description (what to train) and a weight (decimal: `1`, `1.5`, ...).
-- Each task can be **active** or **paused**. Paused tasks don't rotate but stay visible.
+- Each task can be **active** or **paused**. Paused tasks don't rotate and are hidden behind a per-group show/hide control.
 - Within a group, the daily minutes are divided across the active tasks proportionally to their weights. Example: a *Music* group with 240 min/day and three active tasks of weights `2`, `1`, `1` → 120/60/60 min today.
 - Press **Start work** on a group to pick the active task with the largest percentage still pending today (so a small task at 100% pending beats a large task at 50% pending). On ties, the larger absolute remaining wins.
-- The work screen opens paused. You press play when ready. When a task auto-completes or you press Skip, the next-most-incomplete task **in the same group** is loaded, also paused.
+- Press the play button on an individual pending task to work on only that task; completion returns to the home screen instead of rotating to the next one.
+- Press the check button on an individual pending task to mark all of its remaining daily target as complete.
+- The work screen opens paused. You press play when ready. In rotation mode, when a task auto-completes or you press Skip, the next-most-incomplete task **in the same group** is loaded, also paused.
+- Running sessions use elapsed device time and schedule a system alarm, so the counter catches up and the completion sound can fire while the phone is locked.
+- The completion sound can be set from the home screen: silent, default notification, default alarm or default ringtone.
 - Each day is independent: nothing carries over, working over the target doesn't bank credit.
 
 ## Stack

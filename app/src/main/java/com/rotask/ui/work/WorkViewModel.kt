@@ -1,10 +1,12 @@
 package com.rotask.ui.work
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.rotask.audio.CompletionAlarmScheduler
 import com.rotask.audio.SoundPlayer
 import com.rotask.domain.RotaskRepository
 import kotlinx.coroutines.CoroutineScope
@@ -32,7 +34,9 @@ class WorkViewModel(
     private val repo: RotaskRepository,
     private val appScope: CoroutineScope,
     private val soundPlayer: SoundPlayer,
+    private val completionAlarmScheduler: CompletionAlarmScheduler,
     initialTaskId: Long,
+    private val mode: WorkMode,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WorkUiState())
@@ -41,6 +45,10 @@ class WorkViewModel(
     private var currentTaskId: Long = initialTaskId
     private var currentGroupId: Long = 0L
     private var timerJob: Job? = null
+    private var accumulatedElapsedSeconds: Long = 0L
+    private var runningStartedAtMillis: Long? = null
+    private var completionAlarmScheduled: Boolean = false
+    private var keepCompletionAlarmOnClear: Boolean = false
     private val persisted = AtomicBoolean(false)
 
     init {
@@ -50,6 +58,11 @@ class WorkViewModel(
     }
 
     private suspend fun loadTask(taskId: Long, resetPersistFlag: Boolean) {
+        timerJob?.cancel()
+        accumulatedElapsedSeconds = 0L
+        runningStartedAtMillis = null
+        completionAlarmScheduled = false
+        keepCompletionAlarmOnClear = false
         val status = repo.statusForTask(taskId)
         if (status == null || !status.task.enabled || status.remainingSecondsToday <= 0) {
             _state.value = WorkUiState(loading = false, noWorkNeeded = true, finished = true)
@@ -76,9 +89,8 @@ class WorkViewModel(
                 delay(1000)
                 val current = _state.value
                 if (current.finished || current.paused) break
-                val nextElapsed = current.sessionElapsedSeconds + 1
-                _state.value = current.copy(sessionElapsedSeconds = nextElapsed)
-                if (nextElapsed >= current.sessionTargetSeconds) {
+                val updated = syncElapsedWithClock(capAtTarget = true)
+                if (updated.sessionElapsedSeconds >= updated.sessionTargetSeconds) {
                     advanceToNext(reason = AdvanceReason.AUTO_COMPLETED)
                     break
                 }
@@ -90,17 +102,29 @@ class WorkViewModel(
 
     private fun advanceToNext(reason: AdvanceReason) {
         timerJob?.cancel()
-        if (reason == AdvanceReason.AUTO_COMPLETED) {
+        val current = syncElapsedWithClock(capAtTarget = true)
+        accumulatedElapsedSeconds = current.sessionElapsedSeconds
+        runningStartedAtMillis = null
+        if (reason == AdvanceReason.SKIPPED) {
+            cancelCompletionAlarm()
+        }
+        if (reason == AdvanceReason.AUTO_COMPLETED && !completionAlarmScheduled) {
             soundPlayer.playTaskCompleted()
         }
+        keepCompletionAlarmOnClear = reason == AdvanceReason.AUTO_COMPLETED && completionAlarmScheduled
+        completionAlarmScheduled = false
         val finishedTaskId = currentTaskId
         val groupId = currentGroupId
-        val elapsed = _state.value.sessionElapsedSeconds
+        val elapsed = current.sessionElapsedSeconds
         viewModelScope.launch {
             if (elapsed > 0) {
                 repo.recordWork(finishedTaskId, elapsed)
             }
             persisted.set(true)
+            if (mode == WorkMode.SINGLE_TASK) {
+                _state.update { it.copy(finished = true) }
+                return@launch
+            }
             val next = repo.pickNextInGroupExcluding(groupId, finishedTaskId)
             if (next == null) {
                 _state.update { it.copy(finished = true) }
@@ -114,11 +138,22 @@ class WorkViewModel(
         val current = _state.value
         if (current.finished || current.loading) return
         if (current.paused) {
+            accumulatedElapsedSeconds = current.sessionElapsedSeconds
+            runningStartedAtMillis = SystemClock.elapsedRealtime()
+            scheduleCompletionAlarm(current)
             _state.value = current.copy(paused = false)
             startTimer()
         } else {
             timerJob?.cancel()
-            _state.value = current.copy(paused = true)
+            val updated = syncElapsedWithClock(capAtTarget = true)
+            accumulatedElapsedSeconds = updated.sessionElapsedSeconds
+            runningStartedAtMillis = null
+            if (updated.sessionElapsedSeconds >= updated.sessionTargetSeconds) {
+                advanceToNext(reason = AdvanceReason.AUTO_COMPLETED)
+            } else {
+                cancelCompletionAlarm()
+                _state.value = updated.copy(paused = true)
+            }
         }
     }
 
@@ -130,15 +165,52 @@ class WorkViewModel(
 
     fun stop() {
         timerJob?.cancel()
-        val elapsed = _state.value.sessionElapsedSeconds
+        cancelCompletionAlarm()
+        val elapsed = syncElapsedWithClock(capAtTarget = true).sessionElapsedSeconds
+        accumulatedElapsedSeconds = elapsed
+        runningStartedAtMillis = null
         persistOnce(elapsed)
         _state.value = _state.value.copy(finished = true)
     }
 
     override fun onCleared() {
         super.onCleared()
-        val elapsed = _state.value.sessionElapsedSeconds
+        if (!keepCompletionAlarmOnClear) {
+            cancelCompletionAlarm()
+        }
+        val elapsed = syncElapsedWithClock(capAtTarget = true).sessionElapsedSeconds
         persistOnce(elapsed)
+    }
+
+    private fun scheduleCompletionAlarm(current: WorkUiState) {
+        val remainingSeconds = (current.sessionTargetSeconds - current.sessionElapsedSeconds).coerceAtLeast(1L)
+        completionAlarmScheduled = completionAlarmScheduler.schedule(remainingSeconds)
+        keepCompletionAlarmOnClear = false
+    }
+
+    private fun cancelCompletionAlarm() {
+        completionAlarmScheduler.cancel()
+        completionAlarmScheduled = false
+        keepCompletionAlarmOnClear = false
+    }
+
+    private fun syncElapsedWithClock(capAtTarget: Boolean): WorkUiState {
+        val current = _state.value
+        val startedAtMillis = runningStartedAtMillis
+        val rawElapsed = if (startedAtMillis == null) {
+            accumulatedElapsedSeconds
+        } else {
+            val runningSeconds = ((SystemClock.elapsedRealtime() - startedAtMillis).coerceAtLeast(0L)) / 1000L
+            accumulatedElapsedSeconds + runningSeconds
+        }
+        val elapsed = if (capAtTarget && current.sessionTargetSeconds > 0) {
+            rawElapsed.coerceAtMost(current.sessionTargetSeconds)
+        } else {
+            rawElapsed
+        }
+        val updated = current.copy(sessionElapsedSeconds = elapsed)
+        _state.value = updated
+        return updated
     }
 
     private fun persistOnce(elapsed: Long) {
@@ -155,9 +227,11 @@ class WorkViewModel(
             repo: RotaskRepository,
             appScope: CoroutineScope,
             soundPlayer: SoundPlayer,
+            completionAlarmScheduler: CompletionAlarmScheduler,
             taskId: Long,
+            mode: WorkMode,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { WorkViewModel(repo, appScope, soundPlayer, taskId) }
+            initializer { WorkViewModel(repo, appScope, soundPlayer, completionAlarmScheduler, taskId, mode) }
         }
     }
 }

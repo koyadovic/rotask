@@ -17,9 +17,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +37,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -58,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rotask.R
+import com.rotask.audio.CompletionSound
 import com.rotask.data.Group
 import com.rotask.domain.GroupStatus
 import com.rotask.domain.TaskStatus
@@ -68,7 +74,7 @@ import com.rotask.ui.format.formatWeight
 @Composable
 fun HomeScreen(
     vm: HomeViewModel,
-    onStartWork: (Long) -> Unit,
+    onStartWork: (WorkStart) -> Unit,
 ) {
     val state by vm.uiState.collectAsState()
 
@@ -85,6 +91,15 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.home_title)) },
+                actions = {
+                    IconButton(onClick = { vm.showSoundSettingsDialog() }) {
+                        Icon(
+                            Icons.Filled.Settings,
+                            contentDescription = stringResource(R.string.sound_settings),
+                            tint = MaterialTheme.colorScheme.onBackground,
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -112,14 +127,24 @@ fun HomeScreen(
                                 onDelete = { vm.startDeletingGroup(groupStatus.group) },
                             )
                         }
+                        val disabledStatuses = groupStatus.statuses.filter { !it.task.enabled }
+                        val enabledStatuses = groupStatus.statuses.filter { it.task.enabled }
+                        val showDisabled = groupStatus.group.id in state.expandedDisabledGroupIds
+                        val visibleStatuses = if (showDisabled) {
+                            enabledStatuses + disabledStatuses
+                        } else {
+                            enabledStatuses
+                        }
                         items(
-                            groupStatus.statuses,
+                            visibleStatuses,
                             key = { "task-${it.task.id}" },
                         ) { taskStatus ->
                             Spacer(Modifier.height(8.dp))
                             TaskRow(
                                 status = taskStatus,
                                 onToggleEnabled = { vm.toggleEnabled(taskStatus.task) },
+                                onStartTaskAlone = { vm.startTaskAlone(taskStatus.task) },
+                                onMarkDone = { vm.markTaskDone(taskStatus.task) },
                                 onEdit = { vm.startEditingTask(taskStatus.task) },
                                 onDelete = { vm.startDeletingTask(taskStatus.task) },
                             )
@@ -133,6 +158,16 @@ fun HomeScreen(
                                     fontStyle = FontStyle.Italic,
                                     fontSize = 13.sp,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
+                        if (disabledStatuses.isNotEmpty()) {
+                            item(key = "disabled-toggle-${groupStatus.group.id}") {
+                                Spacer(Modifier.height(8.dp))
+                                DisabledTasksToggle(
+                                    count = disabledStatuses.size,
+                                    expanded = showDisabled,
+                                    onClick = { vm.toggleDisabledTasksVisible(groupStatus.group.id) },
                                 )
                             }
                         }
@@ -210,6 +245,15 @@ fun HomeScreen(
             initialDailyMinutes = 60,
             onSave = { name, minutes -> vm.addGroup(name, minutes) },
             onCancel = { vm.dismissDialogs() },
+        )
+    }
+
+    if (state.showSoundSettings) {
+        SoundSettingsDialog(
+            selectedSound = state.completionSound,
+            onSelectSound = { vm.setCompletionSound(it) },
+            onPreview = { vm.previewCompletionSound() },
+            onDismiss = { vm.dismissDialogs() },
         )
     }
 
@@ -320,10 +364,13 @@ private fun GroupHeader(
 private fun TaskRow(
     status: TaskStatus,
     onToggleEnabled: () -> Unit,
+    onStartTaskAlone: () -> Unit,
+    onMarkDone: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val enabled = status.task.enabled
+    val hasRemainingWork = enabled && status.remainingSecondsToday > 0
     val nameColor = if (enabled) MaterialTheme.colorScheme.onSurface
     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
     val secondaryColor = if (enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
@@ -393,6 +440,32 @@ private fun TaskRow(
                     color = if (enabled) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(
+                    onClick = onStartTaskAlone,
+                    enabled = hasRemainingWork,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(R.string.start_single_task),
+                        tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.size(4.dp))
+                IconButton(
+                    onClick = onMarkDone,
+                    enabled = hasRemainingWork,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = stringResource(R.string.mark_task_done),
+                        tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                Spacer(Modifier.size(4.dp))
                 IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
                     Icon(
                         Icons.Filled.Edit,
@@ -413,6 +486,89 @@ private fun TaskRow(
             }
         }
     }
+}
+
+@Composable
+private fun DisabledTasksToggle(
+    count: Int,
+    expanded: Boolean,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+    ) {
+        Icon(
+            imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(
+            text = if (expanded) {
+                stringResource(R.string.hide_disabled_tasks, count)
+            } else {
+                stringResource(R.string.show_disabled_tasks, count)
+            },
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun SoundSettingsDialog(
+    selectedSound: CompletionSound,
+    onSelectSound: (CompletionSound) -> Unit,
+    onPreview: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.sound_settings)) },
+        text = {
+            Column {
+                CompletionSound.entries.forEach { sound ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = selectedSound == sound,
+                            onClick = { onSelectSound(sound) },
+                        )
+                        Text(
+                            text = completionSoundLabel(sound),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.done))
+            }
+        },
+        dismissButton = {
+            TextButton(
+                enabled = selectedSound != CompletionSound.OFF,
+                onClick = onPreview,
+            ) {
+                Text(stringResource(R.string.preview_sound))
+            }
+        },
+    )
+}
+
+@Composable
+private fun completionSoundLabel(sound: CompletionSound): String = when (sound) {
+    CompletionSound.OFF -> stringResource(R.string.sound_off)
+    CompletionSound.NOTIFICATION -> stringResource(R.string.sound_notification)
+    CompletionSound.ALARM -> stringResource(R.string.sound_alarm)
+    CompletionSound.RINGTONE -> stringResource(R.string.sound_ringtone)
 }
 
 @Composable

@@ -10,6 +10,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Rotask">
 
+        <receiver
+            android:name=".audio.CompletionAlarmReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

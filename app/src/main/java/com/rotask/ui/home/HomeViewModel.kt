@@ -5,10 +5,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.rotask.audio.CompletionSound
+import com.rotask.audio.SoundPlayer
+import com.rotask.audio.SoundSettings
 import com.rotask.data.Group
 import com.rotask.data.Task
 import com.rotask.domain.GroupStatus
 import com.rotask.domain.RotaskRepository
+import com.rotask.ui.work.WorkMode
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,20 +24,32 @@ import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val groups: List<GroupStatus> = emptyList(),
+    val completionSound: CompletionSound = CompletionSound.DEFAULT,
+    val expandedDisabledGroupIds: Set<Long> = emptySet(),
     val addingTaskFor: Group? = null,
     val editingTask: Task? = null,
     val deletingTask: Task? = null,
     val showAddGroup: Boolean = false,
+    val showSoundSettings: Boolean = false,
     val editingGroup: Group? = null,
     val deletingGroup: Group? = null,
 )
 
-class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
+data class WorkStart(
+    val taskId: Long,
+    val mode: WorkMode,
+)
+
+class HomeViewModel(
+    private val repo: RotaskRepository,
+    private val soundSettings: SoundSettings,
+    private val soundPlayer: SoundPlayer,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    private val _navToWork = Channel<Long>(Channel.BUFFERED)
+    private val _navToWork = Channel<WorkStart>(Channel.BUFFERED)
     val navToWork = _navToWork.receiveAsFlow()
 
     init {
@@ -48,13 +64,29 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                 _uiState.update { it.copy(groups = groups) }
             }
         }
+        viewModelScope.launch {
+            soundSettings.completionSound.collect { completionSound ->
+                _uiState.update { it.copy(completionSound = completionSound) }
+            }
+        }
     }
 
     // ---- Dialog state ----
 
     fun showAddGroupDialog() = _uiState.update { it.copy(showAddGroup = true) }
+    fun showSoundSettingsDialog() = _uiState.update { it.copy(showSoundSettings = true) }
     fun startEditingGroup(group: Group) = _uiState.update { it.copy(editingGroup = group) }
     fun startDeletingGroup(group: Group) = _uiState.update { it.copy(deletingGroup = group) }
+    fun toggleDisabledTasksVisible(groupId: Long) = _uiState.update {
+        val expanded = it.expandedDisabledGroupIds
+        it.copy(
+            expandedDisabledGroupIds = if (groupId in expanded) {
+                expanded - groupId
+            } else {
+                expanded + groupId
+            }
+        )
+    }
 
     fun showAddTaskFor(group: Group) = _uiState.update { it.copy(addingTaskFor = group) }
     fun startEditingTask(task: Task) = _uiState.update { it.copy(editingTask = task) }
@@ -63,6 +95,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
     fun dismissDialogs() = _uiState.update {
         it.copy(
             showAddGroup = false,
+            showSoundSettings = false,
             editingGroup = null,
             deletingGroup = null,
             addingTaskFor = null,
@@ -134,6 +167,14 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         }
     }
 
+    fun markTaskDone(task: Task) {
+        viewModelScope.launch {
+            val status = repo.statusForTask(task.id) ?: return@launch
+            if (!status.task.enabled || status.remainingSecondsToday <= 0) return@launch
+            repo.recordWork(task.id, status.remainingSecondsToday)
+        }
+    }
+
     fun deleteTask(task: Task) {
         viewModelScope.launch {
             repo.deleteTask(task)
@@ -146,7 +187,15 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
     fun startWorkInGroup(groupId: Long) {
         viewModelScope.launch {
             val taskId = repo.pickNextInGroup(groupId)?.task?.id ?: return@launch
-            _navToWork.send(taskId)
+            _navToWork.send(WorkStart(taskId = taskId, mode = WorkMode.ROTATION))
+        }
+    }
+
+    fun startTaskAlone(task: Task) {
+        viewModelScope.launch {
+            val status = repo.statusForTask(task.id) ?: return@launch
+            if (!status.task.enabled || status.remainingSecondsToday <= 0) return@launch
+            _navToWork.send(WorkStart(taskId = task.id, mode = WorkMode.SINGLE_TASK))
         }
     }
 
@@ -159,11 +208,23 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         }
     }
 
+    fun setCompletionSound(sound: CompletionSound) {
+        soundSettings.setCompletionSound(sound)
+    }
+
+    fun previewCompletionSound() {
+        soundPlayer.playCompletionSound(_uiState.value.completionSound)
+    }
+
     private fun sanitizeWeight(value: Double): Double = if (value > 0.0) value else 1.0
 
     companion object {
-        fun factory(repo: RotaskRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { HomeViewModel(repo) }
+        fun factory(
+            repo: RotaskRepository,
+            soundSettings: SoundSettings,
+            soundPlayer: SoundPlayer,
+        ): ViewModelProvider.Factory = viewModelFactory {
+            initializer { HomeViewModel(repo, soundSettings, soundPlayer) }
         }
     }
 }

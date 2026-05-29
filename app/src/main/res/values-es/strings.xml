@@ -25,6 +25,8 @@
     <string name="task_weight">Peso</string>
     <string name="task_enabled">Activa en la rotación</string>
     <string name="task_paused">Pausada</string>
+    <string name="show_disabled_tasks">Mostrar desactivadas (%1$d)</string>
+    <string name="hide_disabled_tasks">Ocultar desactivadas (%1$d)</string>
 
     <string name="start_work">Iniciar trabajo</string>
     <string name="all_done_today">Por hoy, todo cumplido</string>
@@ -32,6 +34,7 @@
     <string name="save">Guardar</string>
     <string name="cancel">Cancelar</string>
     <string name="delete">Eliminar</string>
+    <string name="done">Listo</string>
 
     <string name="work_title">Trabajando</string>
     <string name="stop_work">Detener</string>
@@ -41,4 +44,13 @@
     <string name="skip_work">Saltar</string>
     <string name="elapsed">Llevas</string>
     <string name="target">Objetivo de hoy</string>
+    <string name="start_single_task">Iniciar sólo esta tarea</string>
+    <string name="mark_task_done">Marcar tarea como realizada</string>
+
+    <string name="sound_settings">Sonido de finalización</string>
+    <string name="preview_sound">Probar</string>
+    <string name="sound_off">Silencio</string>
+    <string name="sound_notification">Notificación por defecto</string>
+    <string name="sound_alarm">Alarma por defecto</string>
+    <string name="sound_ringtone">Tono por defecto</string>
 </resources>
