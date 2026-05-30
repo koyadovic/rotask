@@ -7,6 +7,6 @@ import android.content.Intent
 class CompletionAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != CompletionAlarmScheduler.ACTION_COMPLETION_ALARM) return
-        SoundPlayer(context.applicationContext).playTaskCompleted()
+        CompletionAlarmPlayback.play(context.applicationContext, goAsync())
     }
 }
