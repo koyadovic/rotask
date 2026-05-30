@@ -61,6 +61,10 @@
 
     <string name="sound_settings">Sonido de finalización</string>
     <string name="preview_sound">Probar</string>
+    <string name="current_completion_sound">Actual: %1$s</string>
+    <string name="change_completion_sound">Cambiar</string>
+    <string name="choose_completion_sound">Elegir sonido de finalización</string>
+    <string name="confirm_sound_change">Confirmar</string>
     <string name="sound_off">Silencio</string>
     <string name="sound_notification">Notificación por defecto</string>
     <string name="sound_alarm">Alarma por defecto</string>

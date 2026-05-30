@@ -23,7 +23,11 @@ import kotlinx.coroutines.withContext
 
 data class SettingsUiState(
     val completionSound: CompletionSound = CompletionSound.defaultNotification(),
-    val completionSoundOptions: List<CompletionSoundOption> = emptyList(),
+    val completionSoundTitle: String = "",
+    val soundPickerOpen: Boolean = false,
+    val soundOptionsLoading: Boolean = false,
+    val soundOptions: List<CompletionSoundOption> = emptyList(),
+    val draftCompletionSound: CompletionSound? = null,
     val busy: Boolean = false,
     val status: SettingsStatus? = null,
     val statusId: Int = 0,
@@ -54,22 +58,56 @@ class SettingsViewModel(
 
     init {
         viewModelScope.launch {
-            val options = withContext(Dispatchers.IO) { loadCompletionSoundOptions() }
-            _uiState.update { it.copy(completionSoundOptions = options) }
-        }
-        viewModelScope.launch {
             soundSettings.completionSound.collect { completionSound ->
-                _uiState.update { it.copy(completionSound = completionSound) }
+                val title = withContext(Dispatchers.IO) { titleForSound(completionSound) }
+                _uiState.update {
+                    it.copy(
+                        completionSound = completionSound,
+                        completionSoundTitle = title,
+                    )
+                }
             }
         }
     }
 
-    fun setCompletionSound(sound: CompletionSound) {
-        soundSettings.setCompletionSound(sound)
+    fun openSoundPicker() {
+        _uiState.update {
+            it.copy(
+                soundPickerOpen = true,
+                draftCompletionSound = it.completionSound,
+            )
+        }
+        if (_uiState.value.soundOptions.isNotEmpty() || _uiState.value.soundOptionsLoading) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(soundOptionsLoading = true) }
+            val options = withContext(Dispatchers.IO) { loadCompletionSoundOptions() }
+            _uiState.update {
+                it.copy(
+                    soundOptions = options,
+                    soundOptionsLoading = false,
+                )
+            }
+        }
     }
 
-    fun previewCompletionSound() {
-        soundPlayer.playCompletionSound(_uiState.value.completionSound)
+    fun closeSoundPicker() {
+        _uiState.update {
+            it.copy(
+                soundPickerOpen = false,
+                draftCompletionSound = null,
+            )
+        }
+    }
+
+    fun previewDraftCompletionSound(sound: CompletionSound) {
+        _uiState.update { it.copy(draftCompletionSound = sound) }
+        soundPlayer.playCompletionSound(sound)
+    }
+
+    fun confirmDraftCompletionSound() {
+        val selected = _uiState.value.draftCompletionSound ?: _uiState.value.completionSound
+        soundSettings.setCompletionSound(selected)
+        closeSoundPicker()
     }
 
     fun exportData(uri: Uri) {
@@ -152,6 +190,22 @@ class SettingsViewModel(
             category = appContext.getString(com.rotask.R.string.sound_category_ringtone),
         )
         return options.distinctBy { "${it.sound.audioUsage}:${it.sound.uriString}" }
+    }
+
+    private fun titleForSound(sound: CompletionSound): String {
+        if (sound.isSilent) return appContext.getString(com.rotask.R.string.sound_off)
+        val uri = sound.uri ?: return appContext.getString(com.rotask.R.string.sound_off)
+        val category = when (sound.audioUsage) {
+            AudioAttributes.USAGE_ALARM -> appContext.getString(com.rotask.R.string.sound_category_alarm)
+            AudioAttributes.USAGE_NOTIFICATION_RINGTONE -> appContext.getString(com.rotask.R.string.sound_category_ringtone)
+            else -> appContext.getString(com.rotask.R.string.sound_category_notification)
+        }
+        val title = RingtoneManager.getRingtone(appContext, uri)
+            ?.getTitle(appContext)
+            ?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment
+            ?: uri.toString()
+        return "$category: $title"
     }
 
     private fun loadRingtones(

@@ -61,6 +61,10 @@
 
     <string name="sound_settings">Completion sound</string>
     <string name="preview_sound">Preview</string>
+    <string name="current_completion_sound">Current: %1$s</string>
+    <string name="change_completion_sound">Change</string>
+    <string name="choose_completion_sound">Choose completion sound</string>
+    <string name="confirm_sound_change">Confirm</string>
     <string name="sound_off">Silent</string>
     <string name="sound_notification">Default notification</string>
     <string name="sound_alarm">Default alarm</string>

@@ -12,12 +12,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.AlertDialog
@@ -115,24 +115,18 @@ fun SettingsScreen(
         ) {
             item {
                 SettingsSectionTitle(stringResource(R.string.sound_settings))
-                Spacer(Modifier.height(8.dp))
-                state.completionSoundOptions.forEach { option ->
-                    CompletionSoundRow(
-                        option = option,
-                        selected = state.completionSound == option.sound,
-                        enabled = !state.busy,
-                        onClick = { vm.setCompletionSound(option.sound) },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    enabled = !state.busy && !state.completionSound.isSilent,
-                    onClick = { vm.previewCompletionSound() },
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.current_completion_sound, state.completionSoundTitle),
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    enabled = !state.busy,
+                    onClick = { vm.openSoundPicker() },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null)
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(R.string.preview_sound))
+                    Text(stringResource(R.string.change_completion_sound))
                 }
             }
 
@@ -179,6 +173,51 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingImportUri = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (state.soundPickerOpen) {
+        AlertDialog(
+            onDismissRequest = { vm.closeSoundPicker() },
+            title = { Text(stringResource(R.string.choose_completion_sound)) },
+            text = {
+                if (state.soundOptionsLoading) {
+                    Text(
+                        text = "...",
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 420.dp),
+                    ) {
+                        items(
+                            count = state.soundOptions.size,
+                            key = { index -> state.soundOptions[index].sound.toString() },
+                        ) { index ->
+                            val option = state.soundOptions[index]
+                            CompletionSoundRow(
+                                option = option,
+                                selected = state.draftCompletionSound == option.sound,
+                                enabled = !state.busy,
+                                onClick = { vm.previewDraftCompletionSound(option.sound) },
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !state.soundOptionsLoading,
+                    onClick = { vm.confirmDraftCompletionSound() },
+                ) {
+                    Text(stringResource(R.string.confirm_sound_change))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.closeSoundPicker() }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
