@@ -58,6 +58,9 @@
     <string name="target">Objetivo de hoy</string>
     <string name="start_single_task">Iniciar sólo esta tarea</string>
     <string name="mark_task_done">Marcar tarea como realizada</string>
+    <string name="active_timer_channel">Temporizador activo</string>
+    <string name="active_timer_notification_title">Temporizador de Rotask activo</string>
+    <string name="active_timer_notification_text">La alarma de finalización está preparada.</string>
 
     <string name="sound_settings">Sonido de finalización</string>
     <string name="preview_sound">Probar</string>

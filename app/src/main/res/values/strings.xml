@@ -58,6 +58,9 @@
     <string name="target">Today\'s target</string>
     <string name="start_single_task">Start only this task</string>
     <string name="mark_task_done">Mark task complete</string>
+    <string name="active_timer_channel">Active timer</string>
+    <string name="active_timer_notification_title">Rotask timer running</string>
+    <string name="active_timer_notification_text">The completion alarm is armed.</string>
 
     <string name="sound_settings">Completion sound</string>
     <string name="preview_sound">Preview</string>
