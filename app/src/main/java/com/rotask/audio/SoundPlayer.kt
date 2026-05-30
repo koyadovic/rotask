@@ -3,7 +3,6 @@ package com.rotask.audio
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
-import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -22,11 +21,10 @@ class SoundPlayer(
 
     @Synchronized
     fun playCompletionSound(sound: CompletionSound) {
-        val ringtoneType = sound.ringtoneType ?: return stopCurrentLocked()
+        val uri = sound.uri ?: return stopCurrentLocked()
         stopCurrentLocked()
         try {
-            val uri = RingtoneManager.getDefaultUri(ringtoneType) ?: return
-            playUriOnce(uri, audioUsageFor(ringtoneType))
+            playUriOnce(uri, sound.audioUsage)
         } catch (_: Throwable) {
             stopCurrentLocked()
             // best effort: a missing or silenced default sound is not an error worth surfacing.
@@ -84,12 +82,6 @@ class SoundPlayer(
             player.release()
         }
         currentPlayer = null
-    }
-
-    private fun audioUsageFor(ringtoneType: Int): Int = when (ringtoneType) {
-        RingtoneManager.TYPE_ALARM -> AudioAttributes.USAGE_ALARM
-        RingtoneManager.TYPE_RINGTONE -> AudioAttributes.USAGE_NOTIFICATION_RINGTONE
-        else -> AudioAttributes.USAGE_NOTIFICATION
     }
 
     companion object {

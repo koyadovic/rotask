@@ -18,7 +18,7 @@ Android app to split your daily training time across grouped tasks with configur
 - Press the check button on an individual pending task to mark all of its remaining daily target as complete.
 - The work screen opens paused. You press play when ready. In rotation mode, when a task auto-completes or you press Skip, the next-most-incomplete task **in the same group** is loaded, also paused.
 - Running sessions use elapsed device time and schedule a system alarm, so the counter catches up and the completion sound can fire while the phone is locked.
-- The completion sound can be set from the home screen: silent, default notification, default alarm or default ringtone.
+- The settings screen lets you choose a specific system completion sound and export/import a JSON backup through the Android file picker, including Google Drive when available.
 - Each day is independent: nothing carries over, working over the target doesn't bank credit.
 
 ## Stack

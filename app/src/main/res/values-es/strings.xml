@@ -35,6 +35,18 @@
     <string name="cancel">Cancelar</string>
     <string name="delete">Eliminar</string>
     <string name="done">Listo</string>
+    <string name="back">Volver</string>
+
+    <string name="settings_title">Ajustes</string>
+    <string name="data_management">Datos</string>
+    <string name="export_tasks">Exportar tareas</string>
+    <string name="import_tasks">Importar tareas</string>
+    <string name="import_replace_title">¿Reemplazar los datos actuales?</string>
+    <string name="import_replace_message">Al importar este archivo se eliminarán los grupos, tareas e historial actuales antes de restaurar la copia.</string>
+    <string name="export_success">Tareas exportadas</string>
+    <string name="export_failed">No se pudieron exportar las tareas</string>
+    <string name="import_success">Tareas importadas</string>
+    <string name="import_failed">No se pudieron importar las tareas</string>
 
     <string name="work_title">Trabajando</string>
     <string name="stop_work">Detener</string>
@@ -53,4 +65,10 @@
     <string name="sound_notification">Notificación por defecto</string>
     <string name="sound_alarm">Alarma por defecto</string>
     <string name="sound_ringtone">Tono por defecto</string>
+    <string name="sound_default_notification">Notificación por defecto del sistema</string>
+    <string name="sound_default_alarm">Alarma por defecto del sistema</string>
+    <string name="sound_default_ringtone">Tono por defecto del sistema</string>
+    <string name="sound_category_notification">Notificación</string>
+    <string name="sound_category_alarm">Alarma</string>
+    <string name="sound_category_ringtone">Tono</string>
 </resources>

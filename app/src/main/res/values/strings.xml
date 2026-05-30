@@ -35,6 +35,18 @@
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
     <string name="done">Done</string>
+    <string name="back">Back</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="data_management">Data</string>
+    <string name="export_tasks">Export tasks</string>
+    <string name="import_tasks">Import tasks</string>
+    <string name="import_replace_title">Replace current data?</string>
+    <string name="import_replace_message">Importing this file will delete the current groups, tasks, and history before restoring the backup.</string>
+    <string name="export_success">Tasks exported</string>
+    <string name="export_failed">Could not export tasks</string>
+    <string name="import_success">Tasks imported</string>
+    <string name="import_failed">Could not import tasks</string>
 
     <string name="work_title">Working</string>
     <string name="stop_work">Stop</string>
@@ -53,4 +65,10 @@
     <string name="sound_notification">Default notification</string>
     <string name="sound_alarm">Default alarm</string>
     <string name="sound_ringtone">Default ringtone</string>
+    <string name="sound_default_notification">System default notification</string>
+    <string name="sound_default_alarm">System default alarm</string>
+    <string name="sound_default_ringtone">System default ringtone</string>
+    <string name="sound_category_notification">Notification</string>
+    <string name="sound_category_alarm">Alarm</string>
+    <string name="sound_category_ringtone">Ringtone</string>
 </resources>

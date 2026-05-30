@@ -10,6 +10,8 @@ import androidx.navigation.navArgument
 import com.rotask.RotaskApplication
 import com.rotask.ui.home.HomeScreen
 import com.rotask.ui.home.HomeViewModel
+import com.rotask.ui.settings.SettingsScreen
+import com.rotask.ui.settings.SettingsViewModel
 import com.rotask.ui.work.WorkMode
 import com.rotask.ui.work.WorkScreen
 import com.rotask.ui.work.WorkViewModel
@@ -20,15 +22,26 @@ fun RotaskNavHost(application: RotaskApplication) {
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             val vm: HomeViewModel = viewModel(
-                factory = HomeViewModel.factory(
-                    application.repository,
-                    application.soundSettings,
-                    application.soundPlayer,
-                )
+                factory = HomeViewModel.factory(application.repository)
             )
             HomeScreen(
                 vm = vm,
-                onStartWork = { start -> navController.navigate("work/${start.taskId}/${start.mode.name}") }
+                onStartWork = { start -> navController.navigate("work/${start.taskId}/${start.mode.name}") },
+                onOpenSettings = { navController.navigate("settings") },
+            )
+        }
+        composable("settings") {
+            val vm: SettingsViewModel = viewModel(
+                factory = SettingsViewModel.factory(
+                    application.repository,
+                    application.soundSettings,
+                    application.soundPlayer,
+                    application,
+                )
+            )
+            SettingsScreen(
+                vm = vm,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(

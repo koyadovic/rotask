@@ -37,7 +37,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -63,7 +62,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rotask.R
-import com.rotask.audio.CompletionSound
 import com.rotask.data.Group
 import com.rotask.domain.GroupStatus
 import com.rotask.domain.TaskStatus
@@ -75,6 +73,7 @@ import com.rotask.ui.format.formatWeight
 fun HomeScreen(
     vm: HomeViewModel,
     onStartWork: (WorkStart) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val state by vm.uiState.collectAsState()
 
@@ -92,10 +91,10 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.home_title)) },
                 actions = {
-                    IconButton(onClick = { vm.showSoundSettingsDialog() }) {
+                    IconButton(onClick = onOpenSettings) {
                         Icon(
                             Icons.Filled.Settings,
-                            contentDescription = stringResource(R.string.sound_settings),
+                            contentDescription = stringResource(R.string.settings_title),
                             tint = MaterialTheme.colorScheme.onBackground,
                         )
                     }
@@ -245,15 +244,6 @@ fun HomeScreen(
             initialDailyMinutes = 60,
             onSave = { name, minutes -> vm.addGroup(name, minutes) },
             onCancel = { vm.dismissDialogs() },
-        )
-    }
-
-    if (state.showSoundSettings) {
-        SoundSettingsDialog(
-            selectedSound = state.completionSound,
-            onSelectSound = { vm.setCompletionSound(it) },
-            onPreview = { vm.previewCompletionSound() },
-            onDismiss = { vm.dismissDialogs() },
         )
     }
 
@@ -516,59 +506,6 @@ private fun DisabledTasksToggle(
             fontWeight = FontWeight.SemiBold,
         )
     }
-}
-
-@Composable
-private fun SoundSettingsDialog(
-    selectedSound: CompletionSound,
-    onSelectSound: (CompletionSound) -> Unit,
-    onPreview: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.sound_settings)) },
-        text = {
-            Column {
-                CompletionSound.entries.forEach { sound ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = selectedSound == sound,
-                            onClick = { onSelectSound(sound) },
-                        )
-                        Text(
-                            text = completionSoundLabel(sound),
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.done))
-            }
-        },
-        dismissButton = {
-            TextButton(
-                enabled = selectedSound != CompletionSound.OFF,
-                onClick = onPreview,
-            ) {
-                Text(stringResource(R.string.preview_sound))
-            }
-        },
-    )
-}
-
-@Composable
-private fun completionSoundLabel(sound: CompletionSound): String = when (sound) {
-    CompletionSound.OFF -> stringResource(R.string.sound_off)
-    CompletionSound.NOTIFICATION -> stringResource(R.string.sound_notification)
-    CompletionSound.ALARM -> stringResource(R.string.sound_alarm)
-    CompletionSound.RINGTONE -> stringResource(R.string.sound_ringtone)
 }
 
 @Composable

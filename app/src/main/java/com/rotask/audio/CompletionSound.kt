@@ -1,20 +1,35 @@
 package com.rotask.audio
 
+import android.media.AudioAttributes
 import android.media.RingtoneManager
+import android.net.Uri
 
-enum class CompletionSound(
-    val preferenceValue: String,
-    val ringtoneType: Int?,
+data class CompletionSound(
+    val uriString: String?,
+    val audioUsage: Int = AudioAttributes.USAGE_NOTIFICATION,
 ) {
-    OFF("off", null),
-    NOTIFICATION("notification", RingtoneManager.TYPE_NOTIFICATION),
-    ALARM("alarm", RingtoneManager.TYPE_ALARM),
-    RINGTONE("ringtone", RingtoneManager.TYPE_RINGTONE);
+    val uri: Uri?
+        get() = uriString?.let(Uri::parse)
+
+    val isSilent: Boolean
+        get() = uriString == null
 
     companion object {
-        val DEFAULT = NOTIFICATION
+        val OFF = CompletionSound(uriString = null)
 
-        fun fromPreferenceValue(value: String?): CompletionSound =
-            entries.firstOrNull { it.preferenceValue == value } ?: DEFAULT
+        fun defaultNotification(): CompletionSound =
+            defaultForType(RingtoneManager.TYPE_NOTIFICATION, AudioAttributes.USAGE_NOTIFICATION)
+
+        fun defaultAlarm(): CompletionSound =
+            defaultForType(RingtoneManager.TYPE_ALARM, AudioAttributes.USAGE_ALARM)
+
+        fun defaultRingtone(): CompletionSound =
+            defaultForType(RingtoneManager.TYPE_RINGTONE, AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+
+        private fun defaultForType(ringtoneType: Int, audioUsage: Int): CompletionSound =
+            CompletionSound(
+                uriString = RingtoneManager.getDefaultUri(ringtoneType)?.toString(),
+                audioUsage = audioUsage,
+            )
     }
 }

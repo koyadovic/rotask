@@ -5,9 +5,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.rotask.audio.CompletionSound
-import com.rotask.audio.SoundPlayer
-import com.rotask.audio.SoundSettings
 import com.rotask.data.Group
 import com.rotask.data.Task
 import com.rotask.domain.GroupStatus
@@ -24,13 +21,11 @@ import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val groups: List<GroupStatus> = emptyList(),
-    val completionSound: CompletionSound = CompletionSound.DEFAULT,
     val expandedDisabledGroupIds: Set<Long> = emptySet(),
     val addingTaskFor: Group? = null,
     val editingTask: Task? = null,
     val deletingTask: Task? = null,
     val showAddGroup: Boolean = false,
-    val showSoundSettings: Boolean = false,
     val editingGroup: Group? = null,
     val deletingGroup: Group? = null,
 )
@@ -40,11 +35,7 @@ data class WorkStart(
     val mode: WorkMode,
 )
 
-class HomeViewModel(
-    private val repo: RotaskRepository,
-    private val soundSettings: SoundSettings,
-    private val soundPlayer: SoundPlayer,
-) : ViewModel() {
+class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -64,17 +55,11 @@ class HomeViewModel(
                 _uiState.update { it.copy(groups = groups) }
             }
         }
-        viewModelScope.launch {
-            soundSettings.completionSound.collect { completionSound ->
-                _uiState.update { it.copy(completionSound = completionSound) }
-            }
-        }
     }
 
     // ---- Dialog state ----
 
     fun showAddGroupDialog() = _uiState.update { it.copy(showAddGroup = true) }
-    fun showSoundSettingsDialog() = _uiState.update { it.copy(showSoundSettings = true) }
     fun startEditingGroup(group: Group) = _uiState.update { it.copy(editingGroup = group) }
     fun startDeletingGroup(group: Group) = _uiState.update { it.copy(deletingGroup = group) }
     fun toggleDisabledTasksVisible(groupId: Long) = _uiState.update {
@@ -95,7 +80,6 @@ class HomeViewModel(
     fun dismissDialogs() = _uiState.update {
         it.copy(
             showAddGroup = false,
-            showSoundSettings = false,
             editingGroup = null,
             deletingGroup = null,
             addingTaskFor = null,
@@ -208,23 +192,11 @@ class HomeViewModel(
         }
     }
 
-    fun setCompletionSound(sound: CompletionSound) {
-        soundSettings.setCompletionSound(sound)
-    }
-
-    fun previewCompletionSound() {
-        soundPlayer.playCompletionSound(_uiState.value.completionSound)
-    }
-
     private fun sanitizeWeight(value: Double): Double = if (value > 0.0) value else 1.0
 
     companion object {
-        fun factory(
-            repo: RotaskRepository,
-            soundSettings: SoundSettings,
-            soundPlayer: SoundPlayer,
-        ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { HomeViewModel(repo, soundSettings, soundPlayer) }
+        fun factory(repo: RotaskRepository): ViewModelProvider.Factory = viewModelFactory {
+            initializer { HomeViewModel(repo) }
         }
     }
 }
