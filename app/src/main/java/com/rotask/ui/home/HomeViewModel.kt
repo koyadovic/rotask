@@ -118,7 +118,14 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
 
     // ---- Task actions ----
 
-    fun addTask(groupId: Long, name: String, description: String, weight: Double, enabled: Boolean) {
+    fun addTask(
+        groupId: Long,
+        name: String,
+        description: String,
+        weight: Double,
+        enabled: Boolean,
+        scheduledDays: Int,
+    ) {
         viewModelScope.launch {
             repo.addTask(
                 groupId = groupId,
@@ -126,12 +133,20 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                 description = description.trim(),
                 weight = sanitizeWeight(weight),
                 enabled = enabled,
+                scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
             )
             dismissDialogs()
         }
     }
 
-    fun updateTask(original: Task, name: String, description: String, weight: Double, enabled: Boolean) {
+    fun updateTask(
+        original: Task,
+        name: String,
+        description: String,
+        weight: Double,
+        enabled: Boolean,
+        scheduledDays: Int,
+    ) {
         viewModelScope.launch {
             repo.updateTask(
                 original.copy(
@@ -139,6 +154,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                     description = description.trim(),
                     weight = sanitizeWeight(weight),
                     enabled = enabled,
+                    scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
                 )
             )
             dismissDialogs()

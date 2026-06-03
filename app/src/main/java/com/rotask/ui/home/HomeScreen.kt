@@ -1,5 +1,6 @@
 package com.rotask.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
@@ -29,6 +32,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -63,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rotask.R
 import com.rotask.data.Group
+import com.rotask.data.Task
 import com.rotask.domain.GroupStatus
 import com.rotask.domain.TaskStatus
 import com.rotask.ui.format.formatClock
@@ -198,8 +203,9 @@ fun HomeScreen(
             initialDescription = "",
             initialWeight = 1.0,
             initialEnabled = true,
-            onSave = { name, description, weight, enabled ->
-                vm.addTask(group.id, name, description, weight, enabled)
+            initialScheduledDays = Task.ALL_DAYS_MASK,
+            onSave = { name, description, weight, enabled, scheduledDays ->
+                vm.addTask(group.id, name, description, weight, enabled, scheduledDays)
             },
             onCancel = { vm.dismissDialogs() },
         )
@@ -212,8 +218,9 @@ fun HomeScreen(
             initialDescription = task.description,
             initialWeight = task.weight,
             initialEnabled = task.enabled,
-            onSave = { name, description, weight, enabled ->
-                vm.updateTask(task, name, description, weight, enabled)
+            initialScheduledDays = task.scheduledDays,
+            onSave = { name, description, weight, enabled, scheduledDays ->
+                vm.updateTask(task, name, description, weight, enabled, scheduledDays)
             },
             onCancel = { vm.dismissDialogs() },
         )
@@ -360,7 +367,8 @@ private fun TaskRow(
     onDelete: () -> Unit,
 ) {
     val enabled = status.task.enabled
-    val hasRemainingWork = enabled && status.remainingSecondsToday > 0
+    val scheduledToday = status.scheduledToday
+    val hasRemainingWork = enabled && scheduledToday && status.remainingSecondsToday > 0
     val nameColor = if (enabled) MaterialTheme.colorScheme.onSurface
     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
     val secondaryColor = if (enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
@@ -390,6 +398,13 @@ private fun TaskRow(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    Text(
+                        text = scheduleSummary(status.task.scheduledDays),
+                        fontSize = 12.sp,
+                        color = secondaryColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
                 Text(
                     text = formatWeight(status.task.weight),
@@ -402,7 +417,7 @@ private fun TaskRow(
 
             Spacer(Modifier.height(6.dp))
 
-            if (enabled) {
+            if (enabled && scheduledToday) {
                 val target = status.targetSecondsToday
                 val worked = status.workedSecondsToday
                 val progress = if (target > 0) (worked.toFloat() / target).coerceIn(0f, 1f) else 0f
@@ -420,13 +435,13 @@ private fun TaskRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (enabled) {
-                        "${formatClock(status.workedSecondsToday)} / ${formatClock(status.targetSecondsToday)}"
-                    } else {
-                        stringResource(R.string.task_paused)
+                    text = when {
+                        !enabled -> stringResource(R.string.task_paused)
+                        !scheduledToday -> stringResource(R.string.task_not_scheduled_today)
+                        else -> "${formatClock(status.workedSecondsToday)} / ${formatClock(status.targetSecondsToday)}"
                     },
                     fontSize = 12.sp,
-                    fontStyle = if (enabled) FontStyle.Normal else FontStyle.Italic,
+                    fontStyle = if (enabled && scheduledToday) FontStyle.Normal else FontStyle.Italic,
                     color = if (enabled) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
@@ -623,22 +638,29 @@ private fun TaskEditDialog(
     initialDescription: String,
     initialWeight: Double,
     initialEnabled: Boolean,
-    onSave: (name: String, description: String, weight: Double, enabled: Boolean) -> Unit,
+    initialScheduledDays: Int,
+    onSave: (name: String, description: String, weight: Double, enabled: Boolean, scheduledDays: Int) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
     var description by remember { mutableStateOf(initialDescription) }
     var weightText by remember { mutableStateOf(weightToText(initialWeight)) }
     var enabled by remember { mutableStateOf(initialEnabled) }
+    var scheduledDays by remember { mutableStateOf(Task.sanitizedScheduledDays(initialScheduledDays)) }
 
     val parsedWeight = parseWeight(weightText)
-    val canSave = name.isNotBlank() && parsedWeight != null && parsedWeight > 0.0
+    val hasScheduledDays = (scheduledDays and Task.ALL_DAYS_MASK) != 0
+    val canSave = name.isNotBlank() && parsedWeight != null && parsedWeight > 0.0 && hasScheduledDays
 
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title) },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -676,12 +698,17 @@ private fun TaskEditDialog(
                     )
                     Switch(checked = enabled, onCheckedChange = { enabled = it })
                 }
+                Spacer(Modifier.height(12.dp))
+                ScheduledDaysSelector(
+                    scheduledDays = scheduledDays,
+                    onChange = { scheduledDays = it },
+                )
             }
         },
         confirmButton = {
             TextButton(
                 enabled = canSave,
-                onClick = { onSave(name, description, parsedWeight ?: 1.0, enabled) },
+                onClick = { onSave(name, description, parsedWeight ?: 1.0, enabled, scheduledDays) },
             ) {
                 Text(stringResource(R.string.save))
             }
@@ -692,6 +719,117 @@ private fun TaskEditDialog(
             }
         },
     )
+}
+
+@Composable
+private fun ScheduledDaysSelector(
+    scheduledDays: Int,
+    onChange: (Int) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.task_schedule),
+        color = MaterialTheme.colorScheme.onBackground,
+        fontWeight = FontWeight.SemiBold,
+    )
+    Spacer(Modifier.height(6.dp))
+    ScheduledDayCheckbox(
+        mask = Task.MONDAY_MASK,
+        label = stringResource(R.string.weekday_monday),
+        scheduledDays = scheduledDays,
+        onChange = onChange,
+    )
+    ScheduledDayCheckbox(
+        mask = Task.TUESDAY_MASK,
+        label = stringResource(R.string.weekday_tuesday),
+        scheduledDays = scheduledDays,
+        onChange = onChange,
+    )
+    ScheduledDayCheckbox(
+        mask = Task.WEDNESDAY_MASK,
+        label = stringResource(R.string.weekday_wednesday),
+        scheduledDays = scheduledDays,
+        onChange = onChange,
+    )
+    ScheduledDayCheckbox(
+        mask = Task.THURSDAY_MASK,
+        label = stringResource(R.string.weekday_thursday),
+        scheduledDays = scheduledDays,
+        onChange = onChange,
+    )
+    ScheduledDayCheckbox(
+        mask = Task.FRIDAY_MASK,
+        label = stringResource(R.string.weekday_friday),
+        scheduledDays = scheduledDays,
+        onChange = onChange,
+    )
+    ScheduledDayCheckbox(
+        mask = Task.SATURDAY_MASK,
+        label = stringResource(R.string.weekday_saturday),
+        scheduledDays = scheduledDays,
+        onChange = onChange,
+    )
+    ScheduledDayCheckbox(
+        mask = Task.SUNDAY_MASK,
+        label = stringResource(R.string.weekday_sunday),
+        scheduledDays = scheduledDays,
+        onChange = onChange,
+    )
+    if ((scheduledDays and Task.ALL_DAYS_MASK) == 0) {
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.task_schedule_required),
+            color = MaterialTheme.colorScheme.error,
+            fontSize = 12.sp,
+        )
+    }
+}
+
+@Composable
+private fun ScheduledDayCheckbox(
+    mask: Int,
+    label: String,
+    scheduledDays: Int,
+    onChange: (Int) -> Unit,
+) {
+    val checked = (scheduledDays and mask) != 0
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .clickable { onChange(toggleScheduledDay(scheduledDays, mask)) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = { onChange(toggleScheduledDay(scheduledDays, mask)) },
+        )
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+    }
+}
+
+@Composable
+private fun scheduleSummary(scheduledDays: Int): String {
+    val normalized = scheduledDays and Task.ALL_DAYS_MASK
+    if (normalized == Task.ALL_DAYS_MASK) return stringResource(R.string.task_schedule_every_day)
+    if (normalized == 0) return stringResource(R.string.task_schedule_no_days)
+    return listOfNotNull(
+        stringResource(R.string.weekday_short_monday).takeIf { (normalized and Task.MONDAY_MASK) != 0 },
+        stringResource(R.string.weekday_short_tuesday).takeIf { (normalized and Task.TUESDAY_MASK) != 0 },
+        stringResource(R.string.weekday_short_wednesday).takeIf { (normalized and Task.WEDNESDAY_MASK) != 0 },
+        stringResource(R.string.weekday_short_thursday).takeIf { (normalized and Task.THURSDAY_MASK) != 0 },
+        stringResource(R.string.weekday_short_friday).takeIf { (normalized and Task.FRIDAY_MASK) != 0 },
+        stringResource(R.string.weekday_short_saturday).takeIf { (normalized and Task.SATURDAY_MASK) != 0 },
+        stringResource(R.string.weekday_short_sunday).takeIf { (normalized and Task.SUNDAY_MASK) != 0 },
+    ).joinToString(", ")
+}
+
+private fun toggleScheduledDay(scheduledDays: Int, mask: Int): Int {
+    val normalized = scheduledDays and Task.ALL_DAYS_MASK
+    return if ((normalized and mask) != 0) normalized and mask.inv()
+    else normalized or mask
 }
 
 private fun sanitizeWeightInput(raw: String): String {

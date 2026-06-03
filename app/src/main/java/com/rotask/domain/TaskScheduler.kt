@@ -8,6 +8,7 @@ import java.time.LocalDate
 
 data class TaskStatus(
     val task: Task,
+    val scheduledToday: Boolean,
     val targetSecondsToday: Long,
     val workedSecondsToday: Long,
     val remainingSecondsToday: Long,
@@ -26,7 +27,7 @@ data class GroupStatus(
     val totalTargetSeconds: Long get() = statuses.sumOf { it.targetSecondsToday }
     val totalWorkedSeconds: Long get() = statuses.sumOf { it.workedSecondsToday }
     val hasWorkRemaining: Boolean
-        get() = statuses.any { it.task.enabled && it.remainingSecondsToday > 0 }
+        get() = statuses.any { it.task.enabled && it.scheduledToday && it.remainingSecondsToday > 0 }
 }
 
 class TaskScheduler(private val db: AppDatabase) {
@@ -35,15 +36,17 @@ class TaskScheduler(private val db: AppDatabase) {
         val groups = db.groupDao().getAll()
         return groups.map { group ->
             val tasks = db.taskDao().getAllInGroup(group.id)
-            val enabledTasks = tasks.filter { it.enabled }
+            val enabledTasks = tasks.filter { it.enabled && it.isScheduledOn(today.dayOfWeek) }
             val sumWeights = enabledTasks.sumOf { it.weight }
             val totalSecs = group.dailyMinutes * 60L
             val statuses = tasks.map { t ->
                 val worked = db.workSessionDao().totalForDate(t.id, today.toString())
-                if (t.enabled && sumWeights > 0.0) {
+                val scheduledToday = t.isScheduledOn(today.dayOfWeek)
+                if (t.enabled && scheduledToday && sumWeights > 0.0) {
                     val target = (totalSecs * t.weight / sumWeights).toLong()
                     TaskStatus(
                         task = t,
+                        scheduledToday = scheduledToday,
                         targetSecondsToday = target,
                         workedSecondsToday = worked,
                         remainingSecondsToday = (target - worked).coerceAtLeast(0)
@@ -51,6 +54,7 @@ class TaskScheduler(private val db: AppDatabase) {
                 } else {
                     TaskStatus(
                         task = t,
+                        scheduledToday = scheduledToday,
                         targetSecondsToday = 0L,
                         workedSecondsToday = worked,
                         remainingSecondsToday = 0L,
@@ -69,7 +73,7 @@ class TaskScheduler(private val db: AppDatabase) {
         val candidates = computeGroupStatuses(today)
             .firstOrNull { it.group.id == groupId }
             ?.statuses
-            ?.filter { it.task.enabled && it.remainingSecondsToday > 0 && it.task.id != excludeTaskId }
+            ?.filter { it.task.enabled && it.scheduledToday && it.remainingSecondsToday > 0 && it.task.id != excludeTaskId }
             ?: return null
         if (candidates.isEmpty()) return null
         val maxPct = candidates.maxOf { it.percentIncomplete }

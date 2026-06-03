@@ -62,6 +62,7 @@ class RotaskRepository(
         description: String,
         weight: Double,
         enabled: Boolean,
+        scheduledDays: Int,
     ) {
         db.taskDao().insert(
             Task(
@@ -70,12 +71,13 @@ class RotaskRepository(
                 description = description,
                 weight = weight,
                 enabled = enabled,
+                scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
             )
         )
     }
 
     suspend fun updateTask(task: Task) {
-        db.taskDao().update(task)
+        db.taskDao().update(task.copy(scheduledDays = Task.sanitizedScheduledDays(task.scheduledDays)))
     }
 
     suspend fun setEnabled(task: Task, enabled: Boolean) {
@@ -111,6 +113,7 @@ class RotaskRepository(
                     .put("description", task.description)
                     .put("weight", task.weight)
                     .put("enabled", task.enabled)
+                    .put("scheduledDays", Task.sanitizedScheduledDays(task.scheduledDays))
             })
             .put("workSessions", workSessions.toJsonArray { session ->
                 JSONObject()
@@ -157,6 +160,7 @@ class RotaskRepository(
                 description = obj.optString("description", ""),
                 weight = obj.getDouble("weight").takeIf { it > 0.0 } ?: 1.0,
                 enabled = obj.optBoolean("enabled", true),
+                scheduledDays = Task.sanitizedScheduledDays(obj.optInt("scheduledDays", Task.ALL_DAYS_MASK)),
             )
         }
         val taskIds = tasks.map { it.id }.toSet()
