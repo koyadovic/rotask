@@ -56,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.text.font.FontStyle
@@ -368,14 +369,18 @@ private fun TaskRow(
 ) {
     val enabled = status.task.enabled
     val scheduledToday = status.scheduledToday
-    val hasRemainingWork = enabled && scheduledToday && status.remainingSecondsToday > 0
-    val nameColor = if (enabled) MaterialTheme.colorScheme.onSurface
+    val appliesToday = enabled && scheduledToday
+    val hasRemainingWork = appliesToday && status.remainingSecondsToday > 0
+    val rowAlpha = if (appliesToday) 1f else 0.62f
+    val nameColor = if (appliesToday) MaterialTheme.colorScheme.onSurface
     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-    val secondaryColor = if (enabled) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+    val secondaryColor = if (appliesToday) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(rowAlpha),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -408,7 +413,7 @@ private fun TaskRow(
                 }
                 Text(
                     text = formatWeight(status.task.weight),
-                    color = if (enabled) MaterialTheme.colorScheme.primary else secondaryColor,
+                    color = if (appliesToday) MaterialTheme.colorScheme.primary else secondaryColor,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.size(8.dp))
@@ -417,7 +422,7 @@ private fun TaskRow(
 
             Spacer(Modifier.height(6.dp))
 
-            if (enabled && scheduledToday) {
+            if (appliesToday) {
                 val target = status.targetSecondsToday
                 val worked = status.workedSecondsToday
                 val progress = if (target > 0) (worked.toFloat() / target).coerceIn(0f, 1f) else 0f
@@ -441,8 +446,8 @@ private fun TaskRow(
                         else -> "${formatClock(status.workedSecondsToday)} / ${formatClock(status.targetSecondsToday)}"
                     },
                     fontSize = 12.sp,
-                    fontStyle = if (enabled && scheduledToday) FontStyle.Normal else FontStyle.Italic,
-                    color = if (enabled) MaterialTheme.colorScheme.onSurface else secondaryColor,
+                    fontStyle = if (appliesToday) FontStyle.Normal else FontStyle.Italic,
+                    color = if (appliesToday) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(
