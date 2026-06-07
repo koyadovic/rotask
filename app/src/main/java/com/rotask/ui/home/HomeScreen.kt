@@ -261,8 +261,12 @@ fun GroupTasksScreen(
                     )
                 }
             } else {
-                val disabledStatuses = groupStatus.statuses.filter { !it.task.enabled }
-                val enabledStatuses = groupStatus.statuses.filter { it.task.enabled }
+                val enabledStatuses = groupStatus.statuses
+                    .filter { it.task.enabled }
+                    .sortedWith(compareByDescending<TaskStatus> { it.scheduledToday }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.task.name })
+                val disabledStatuses = groupStatus.statuses
+                    .filter { !it.task.enabled }
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.task.name })
                 val showDisabled = groupStatus.group.id in state.expandedDisabledGroupIds
                 val visibleStatuses = if (showDisabled) {
                     enabledStatuses + disabledStatuses
