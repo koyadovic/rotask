@@ -13,6 +13,9 @@
     <string name="edit_group">Editar grupo</string>
     <string name="delete_group">Eliminar grupo</string>
     <string name="group_name">Nombre</string>
+    <string name="group_progress_value">%1$s / %2$s</string>
+    <string name="group_progress_remaining">Quedan %1$s</string>
+    <string name="group_no_work_today">Sin tareas programadas hoy</string>
     <string name="delete_group_confirm_empty">¿Eliminar %1$s?</string>
     <string name="delete_group_confirm_with_tasks">Al eliminar %1$s borrarás también sus %2$d tarea(s) y su historial.</string>
 

@@ -13,6 +13,9 @@
     <string name="edit_group">Edit group</string>
     <string name="delete_group">Delete group</string>
     <string name="group_name">Name</string>
+    <string name="group_progress_value">%1$s / %2$s</string>
+    <string name="group_progress_remaining">%1$s left</string>
+    <string name="group_no_work_today">No tasks scheduled today</string>
     <string name="delete_group_confirm_empty">Delete %1$s?</string>
     <string name="delete_group_confirm_with_tasks">Deleting %1$s also removes its %2$d task(s) and their history.</string>
 

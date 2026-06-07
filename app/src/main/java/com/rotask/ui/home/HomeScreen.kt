@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -79,6 +80,7 @@ import com.rotask.ui.format.formatWeight
 fun HomeScreen(
     vm: HomeViewModel,
     onStartWork: (WorkStart) -> Unit,
+    onOpenGroup: (Long) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val state by vm.uiState.collectAsState()
@@ -128,59 +130,15 @@ fun HomeScreen(
                         item(key = "header-${groupStatus.group.id}") {
                             GroupHeader(
                                 status = groupStatus,
+                                onOpen = { onOpenGroup(groupStatus.group.id) },
                                 onEdit = { vm.startEditingGroup(groupStatus.group) },
                                 onDelete = { vm.startDeletingGroup(groupStatus.group) },
                             )
-                        }
-                        val disabledStatuses = groupStatus.statuses.filter { !it.task.enabled }
-                        val enabledStatuses = groupStatus.statuses.filter { it.task.enabled }
-                        val showDisabled = groupStatus.group.id in state.expandedDisabledGroupIds
-                        val visibleStatuses = if (showDisabled) {
-                            enabledStatuses + disabledStatuses
-                        } else {
-                            enabledStatuses
-                        }
-                        items(
-                            visibleStatuses,
-                            key = { "task-${it.task.id}" },
-                        ) { taskStatus ->
-                            Spacer(Modifier.height(8.dp))
-                            TaskRow(
-                                status = taskStatus,
-                                onToggleEnabled = { vm.toggleEnabled(taskStatus.task) },
-                                onStartTaskAlone = { vm.startTaskAlone(taskStatus.task) },
-                                onMarkDone = { vm.markTaskDone(taskStatus.task) },
-                                onEdit = { vm.startEditingTask(taskStatus.task) },
-                                onDelete = { vm.startDeletingTask(taskStatus.task) },
-                            )
-                        }
-                        if (groupStatus.statuses.isEmpty()) {
-                            item(key = "empty-${groupStatus.group.id}") {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    text = stringResource(R.string.group_empty),
-                                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                                    fontStyle = FontStyle.Italic,
-                                    fontSize = 13.sp,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                                )
-                            }
-                        }
-                        if (disabledStatuses.isNotEmpty()) {
-                            item(key = "disabled-toggle-${groupStatus.group.id}") {
-                                Spacer(Modifier.height(8.dp))
-                                DisabledTasksToggle(
-                                    count = disabledStatuses.size,
-                                    expanded = showDisabled,
-                                    onClick = { vm.toggleDisabledTasksVisible(groupStatus.group.id) },
-                                )
-                            }
                         }
                         item(key = "actions-${groupStatus.group.id}") {
                             Spacer(Modifier.height(10.dp))
                             GroupActions(
                                 canStartWork = groupStatus.hasWorkRemaining,
-                                onAddTask = { vm.showAddTaskFor(groupStatus.group) },
                                 onStartWork = { vm.startWorkInGroup(groupStatus.group.id) },
                             )
                             Spacer(Modifier.height(24.dp))
@@ -196,54 +154,6 @@ fun HomeScreen(
     }
 
     // Dialogs
-
-    state.addingTaskFor?.let { group ->
-        TaskEditDialog(
-            title = stringResource(R.string.add_task_in, group.name),
-            initialName = "",
-            initialDescription = "",
-            initialWeight = 1.0,
-            initialEnabled = true,
-            initialScheduledDays = Task.ALL_DAYS_MASK,
-            onSave = { name, description, weight, enabled, scheduledDays ->
-                vm.addTask(group.id, name, description, weight, enabled, scheduledDays)
-            },
-            onCancel = { vm.dismissDialogs() },
-        )
-    }
-
-    state.editingTask?.let { task ->
-        TaskEditDialog(
-            title = stringResource(R.string.edit_task),
-            initialName = task.name,
-            initialDescription = task.description,
-            initialWeight = task.weight,
-            initialEnabled = task.enabled,
-            initialScheduledDays = task.scheduledDays,
-            onSave = { name, description, weight, enabled, scheduledDays ->
-                vm.updateTask(task, name, description, weight, enabled, scheduledDays)
-            },
-            onCancel = { vm.dismissDialogs() },
-        )
-    }
-
-    state.deletingTask?.let { task ->
-        AlertDialog(
-            onDismissRequest = { vm.dismissDialogs() },
-            title = { Text(stringResource(R.string.delete_task)) },
-            text = { Text(task.name) },
-            confirmButton = {
-                TextButton(onClick = { vm.deleteTask(task) }) {
-                    Text(stringResource(R.string.delete))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { vm.dismissDialogs() }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
-    }
 
     if (state.showAddGroup) {
         GroupEditDialog(
@@ -293,6 +203,170 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GroupTasksScreen(
+    vm: HomeViewModel,
+    groupId: Long,
+    onStartWork: (WorkStart) -> Unit,
+    onBack: () -> Unit,
+) {
+    val state by vm.uiState.collectAsState()
+    val groupStatus = state.groups.firstOrNull { it.group.id == groupId }
+
+    LaunchedEffect(Unit) {
+        vm.navToWork.collect { onStartWork(it) }
+    }
+
+    LifecycleResumeEffect(Unit) {
+        vm.refresh()
+        onPauseOrDispose { }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(groupStatus?.group?.name ?: stringResource(R.string.home_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                ),
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            if (groupStatus == null) {
+                item {
+                    Text(
+                        text = stringResource(R.string.group_empty),
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                        fontStyle = FontStyle.Italic,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                    )
+                }
+            } else {
+                val disabledStatuses = groupStatus.statuses.filter { !it.task.enabled }
+                val enabledStatuses = groupStatus.statuses.filter { it.task.enabled }
+                val showDisabled = groupStatus.group.id in state.expandedDisabledGroupIds
+                val visibleStatuses = if (showDisabled) {
+                    enabledStatuses + disabledStatuses
+                } else {
+                    enabledStatuses
+                }
+                items(
+                    visibleStatuses,
+                    key = { "task-${it.task.id}" },
+                ) { taskStatus ->
+                    Spacer(Modifier.height(8.dp))
+                    TaskRow(
+                        status = taskStatus,
+                        onToggleEnabled = { vm.toggleEnabled(taskStatus.task) },
+                        onStartTaskAlone = { vm.startTaskAlone(taskStatus.task) },
+                        onMarkDone = { vm.markTaskDone(taskStatus.task) },
+                        onEdit = { vm.startEditingTask(taskStatus.task) },
+                        onDelete = { vm.startDeletingTask(taskStatus.task) },
+                    )
+                }
+                if (groupStatus.statuses.isEmpty()) {
+                    item(key = "empty-${groupStatus.group.id}") {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.group_empty),
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            fontStyle = FontStyle.Italic,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+                if (disabledStatuses.isNotEmpty()) {
+                    item(key = "disabled-toggle-${groupStatus.group.id}") {
+                        Spacer(Modifier.height(8.dp))
+                        DisabledTasksToggle(
+                            count = disabledStatuses.size,
+                            expanded = showDisabled,
+                            onClick = { vm.toggleDisabledTasksVisible(groupStatus.group.id) },
+                        )
+                    }
+                }
+                item(key = "actions-${groupStatus.group.id}") {
+                    Spacer(Modifier.height(10.dp))
+                    GroupActions(
+                        canStartWork = groupStatus.hasWorkRemaining,
+                        onAddTask = { vm.showAddTaskFor(groupStatus.group) },
+                        onStartWork = { vm.startWorkInGroup(groupStatus.group.id) },
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
+            }
+        }
+    }
+
+    state.addingTaskFor?.let { group ->
+        TaskEditDialog(
+            title = stringResource(R.string.add_task_in, group.name),
+            initialName = "",
+            initialDescription = "",
+            initialWeight = 1.0,
+            initialEnabled = true,
+            initialScheduledDays = Task.ALL_DAYS_MASK,
+            onSave = { name, description, weight, enabled, scheduledDays ->
+                vm.addTask(group.id, name, description, weight, enabled, scheduledDays)
+            },
+            onCancel = { vm.dismissDialogs() },
+        )
+    }
+
+    state.editingTask?.let { task ->
+        TaskEditDialog(
+            title = stringResource(R.string.edit_task),
+            initialName = task.name,
+            initialDescription = task.description,
+            initialWeight = task.weight,
+            initialEnabled = task.enabled,
+            initialScheduledDays = task.scheduledDays,
+            onSave = { name, description, weight, enabled, scheduledDays ->
+                vm.updateTask(task, name, description, weight, enabled, scheduledDays)
+            },
+            onCancel = { vm.dismissDialogs() },
+        )
+    }
+
+    state.deletingTask?.let { task ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissDialogs() },
+            title = { Text(stringResource(R.string.delete_task)) },
+            text = { Text(task.name) },
+            confirmButton = {
+                TextButton(onClick = { vm.deleteTask(task) }) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissDialogs() }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
 @Composable
 private fun EmptyState(onAddGroup: () -> Unit) {
     Column(
@@ -319,11 +393,25 @@ private fun EmptyState(onAddGroup: () -> Unit) {
 @Composable
 private fun GroupHeader(
     status: GroupStatus,
+    onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val targetSeconds = status.totalTargetSeconds
+    val workedSeconds = status.totalWorkedSeconds
+    val remainingSeconds = (targetSeconds - workedSeconds).coerceAtLeast(0L)
+    val progress = if (targetSeconds > 0L) {
+        (workedSeconds.toFloat() / targetSeconds).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onOpen),
+        ) {
             Text(
                 text = status.group.name,
                 fontSize = 20.sp,
@@ -354,7 +442,47 @@ private fun GroupHeader(
             )
         }
     }
-    Spacer(Modifier.height(6.dp))
+    Spacer(Modifier.height(8.dp))
+    Column(modifier = Modifier.clickable(onClick = onOpen)) {
+        if (targetSeconds > 0L) {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(7.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.group_progress_value,
+                        formatClock(workedSeconds),
+                        formatClock(targetSeconds),
+                    ),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(R.string.group_progress_remaining, formatClock(remainingSeconds)),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        } else {
+            Text(
+                text = stringResource(R.string.group_no_work_today),
+                fontSize = 12.sp,
+                fontStyle = FontStyle.Italic,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.58f),
+            )
+        }
+    }
+    Spacer(Modifier.height(8.dp))
     HorizontalDivider(color = MaterialTheme.colorScheme.surface)
 }
 
@@ -531,7 +659,7 @@ private fun DisabledTasksToggle(
 @Composable
 private fun GroupActions(
     canStartWork: Boolean,
-    onAddTask: () -> Unit,
+    onAddTask: (() -> Unit)? = null,
     onStartWork: () -> Unit,
 ) {
     Row(
@@ -539,19 +667,27 @@ private fun GroupActions(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedButton(
-            onClick = onAddTask,
-            modifier = Modifier.height(52.dp),
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = null)
-            Spacer(Modifier.size(6.dp))
-            Text(stringResource(R.string.add_task_short))
+        if (onAddTask != null) {
+            OutlinedButton(
+                onClick = onAddTask,
+                modifier = Modifier.height(52.dp),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(Modifier.size(6.dp))
+                Text(stringResource(R.string.add_task_short))
+            }
+            Spacer(Modifier.weight(1f))
         }
-        Spacer(Modifier.weight(1f))
         Button(
             onClick = onStartWork,
             enabled = canStartWork,
-            modifier = Modifier.height(52.dp),
+            modifier = if (onAddTask == null) {
+                Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            } else {
+                Modifier.height(52.dp)
+            },
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,

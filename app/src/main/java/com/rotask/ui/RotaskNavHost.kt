@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rotask.RotaskApplication
+import com.rotask.ui.home.GroupTasksScreen
 import com.rotask.ui.home.HomeScreen
 import com.rotask.ui.home.HomeViewModel
 import com.rotask.ui.settings.SettingsScreen
@@ -27,7 +28,23 @@ fun RotaskNavHost(application: RotaskApplication) {
             HomeScreen(
                 vm = vm,
                 onStartWork = { start -> navController.navigate("work/${start.taskId}/${start.mode.name}") },
+                onOpenGroup = { groupId -> navController.navigate("group/$groupId") },
                 onOpenSettings = { navController.navigate("settings") },
+            )
+        }
+        composable(
+            route = "group/{groupId}",
+            arguments = listOf(navArgument("groupId") { type = NavType.LongType }),
+        ) { entry ->
+            val groupId = entry.arguments?.getLong("groupId") ?: 0L
+            val vm: HomeViewModel = viewModel(
+                factory = HomeViewModel.factory(application.repository)
+            )
+            GroupTasksScreen(
+                vm = vm,
+                groupId = groupId,
+                onStartWork = { start -> navController.navigate("work/${start.taskId}/${start.mode.name}") },
+                onBack = { navController.popBackStack() },
             )
         }
         composable("settings") {
