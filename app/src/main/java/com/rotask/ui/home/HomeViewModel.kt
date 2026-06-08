@@ -90,19 +90,20 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
 
     // ---- Group actions ----
 
-    fun addGroup(name: String, dailyMinutes: Int) {
+    fun addGroup(name: String, dailyMinutes: Int, timed: Boolean) {
         viewModelScope.launch {
-            repo.addGroup(name, dailyMinutes)
+            repo.addGroup(name, dailyMinutes, timed)
             dismissDialogs()
         }
     }
 
-    fun updateGroup(original: Group, name: String, dailyMinutes: Int) {
+    fun updateGroup(original: Group, name: String, dailyMinutes: Int, timed: Boolean) {
         viewModelScope.launch {
             repo.updateGroup(
                 original.copy(
                     name = name.trim(),
                     dailyMinutes = dailyMinutes.coerceAtLeast(1),
+                    timed = timed,
                 )
             )
             dismissDialogs()
@@ -169,9 +170,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
 
     fun markTaskDone(task: Task) {
         viewModelScope.launch {
-            val status = repo.statusForTask(task.id) ?: return@launch
-            if (!status.task.enabled || status.remainingSecondsToday <= 0) return@launch
-            repo.recordWork(task.id, status.remainingSecondsToday)
+            repo.markTaskDone(task.id)
         }
     }
 
@@ -194,7 +193,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
     fun startTaskAlone(task: Task) {
         viewModelScope.launch {
             val status = repo.statusForTask(task.id) ?: return@launch
-            if (!status.task.enabled || status.remainingSecondsToday <= 0) return@launch
+            if (!status.timed || !status.task.enabled || status.remainingSecondsToday <= 0) return@launch
             _navToWork.send(WorkStart(taskId = task.id, mode = WorkMode.SINGLE_TASK))
         }
     }

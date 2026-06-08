@@ -64,7 +64,7 @@ class WorkViewModel(
         completionAlarmScheduled = false
         keepCompletionAlarmOnClear = false
         val status = repo.statusForTask(taskId)
-        if (status == null || !status.task.enabled || status.remainingSecondsToday <= 0) {
+        if (status == null || !status.timed || !status.task.enabled || status.remainingSecondsToday <= 0) {
             _state.value = WorkUiState(loading = false, noWorkNeeded = true, finished = true)
             return
         }

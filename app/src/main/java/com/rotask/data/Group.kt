@@ -8,4 +8,5 @@ data class Group(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val dailyMinutes: Int,
+    val timed: Boolean = true,
 )

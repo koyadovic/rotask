@@ -138,8 +138,16 @@ fun HomeScreen(
                         item(key = "actions-${groupStatus.group.id}") {
                             Spacer(Modifier.height(10.dp))
                             GroupActions(
-                                canStartWork = groupStatus.hasWorkRemaining,
-                                onStartWork = { vm.startWorkInGroup(groupStatus.group.id) },
+                                canStartWork = if (groupStatus.group.timed) groupStatus.hasWorkRemaining else true,
+                                onStartWork = {
+                                    if (groupStatus.group.timed) {
+                                        vm.startWorkInGroup(groupStatus.group.id)
+                                    } else {
+                                        onOpenGroup(groupStatus.group.id)
+                                    }
+                                },
+                                startLabel = if (groupStatus.group.timed) null else stringResource(R.string.view_tasks),
+                                showStartIcon = groupStatus.group.timed,
                             )
                             Spacer(Modifier.height(24.dp))
                         }
@@ -160,7 +168,8 @@ fun HomeScreen(
             title = stringResource(R.string.add_group),
             initialName = "",
             initialDailyMinutes = 60,
-            onSave = { name, minutes -> vm.addGroup(name, minutes) },
+            initialTimed = true,
+            onSave = { name, minutes, timed -> vm.addGroup(name, minutes, timed) },
             onCancel = { vm.dismissDialogs() },
         )
     }
@@ -170,7 +179,8 @@ fun HomeScreen(
             title = stringResource(R.string.edit_group),
             initialName = group.name,
             initialDailyMinutes = group.dailyMinutes,
-            onSave = { name, minutes -> vm.updateGroup(group, name, minutes) },
+            initialTimed = group.timed,
+            onSave = { name, minutes, timed -> vm.updateGroup(group, name, minutes, timed) },
             onCancel = { vm.dismissDialogs() },
         )
     }
@@ -263,7 +273,13 @@ fun GroupTasksScreen(
             } else {
                 val enabledStatuses = groupStatus.statuses
                     .filter { it.task.enabled }
-                    .sortedWith(compareByDescending<TaskStatus> { it.scheduledToday }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.task.name })
+                    .sortedWith(
+                        compareByDescending<TaskStatus> { it.scheduledToday }
+                            .thenBy {
+                                if (!groupStatus.group.timed && it.scheduledToday && it.completedToday) 1 else 0
+                            }
+                            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.task.name }
+                    )
                 val disabledStatuses = groupStatus.statuses
                     .filter { !it.task.enabled }
                     .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.task.name })
@@ -280,6 +296,7 @@ fun GroupTasksScreen(
                     Spacer(Modifier.height(8.dp))
                     TaskRow(
                         status = taskStatus,
+                        timedGroup = groupStatus.group.timed,
                         onToggleEnabled = { vm.toggleEnabled(taskStatus.task) },
                         onStartTaskAlone = { vm.startTaskAlone(taskStatus.task) },
                         onMarkDone = { vm.markTaskDone(taskStatus.task) },
@@ -314,7 +331,11 @@ fun GroupTasksScreen(
                     GroupActions(
                         canStartWork = groupStatus.hasWorkRemaining,
                         onAddTask = { vm.showAddTaskFor(groupStatus.group) },
-                        onStartWork = { vm.startWorkInGroup(groupStatus.group.id) },
+                        onStartWork = if (groupStatus.group.timed) {
+                            { vm.startWorkInGroup(groupStatus.group.id) }
+                        } else {
+                            null
+                        },
                     )
                     Spacer(Modifier.height(16.dp))
                 }
@@ -330,6 +351,7 @@ fun GroupTasksScreen(
             initialWeight = 1.0,
             initialEnabled = true,
             initialScheduledDays = Task.ALL_DAYS_MASK,
+            timedGroup = group.timed,
             onSave = { name, description, weight, enabled, scheduledDays ->
                 vm.addTask(group.id, name, description, weight, enabled, scheduledDays)
             },
@@ -338,6 +360,7 @@ fun GroupTasksScreen(
     }
 
     state.editingTask?.let { task ->
+        val timedGroup = state.groups.firstOrNull { it.group.id == task.groupId }?.group?.timed ?: true
         TaskEditDialog(
             title = stringResource(R.string.edit_task),
             initialName = task.name,
@@ -345,6 +368,7 @@ fun GroupTasksScreen(
             initialWeight = task.weight,
             initialEnabled = task.enabled,
             initialScheduledDays = task.scheduledDays,
+            timedGroup = timedGroup,
             onSave = { name, description, weight, enabled, scheduledDays ->
                 vm.updateTask(task, name, description, weight, enabled, scheduledDays)
             },
@@ -404,11 +428,20 @@ private fun GroupHeader(
     val targetSeconds = status.totalTargetSeconds
     val workedSeconds = status.totalWorkedSeconds
     val remainingSeconds = (targetSeconds - workedSeconds).coerceAtLeast(0L)
-    val progress = if (targetSeconds > 0L) {
+    val timeProgress = if (targetSeconds > 0L) {
         (workedSeconds.toFloat() / targetSeconds).coerceIn(0f, 1f)
     } else {
         0f
     }
+    val scheduledTasks = status.scheduledTaskCountToday
+    val completedTasks = status.completedTaskCountToday.coerceAtMost(scheduledTasks)
+    val remainingTasks = (scheduledTasks - completedTasks).coerceAtLeast(0)
+    val taskProgress = if (scheduledTasks > 0) {
+        (completedTasks.toFloat() / scheduledTasks).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val taskProgressPercent = (taskProgress * 100f + 0.5f).toInt()
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(
@@ -423,7 +456,11 @@ private fun GroupHeader(
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = stringResource(R.string.daily_minutes_value, status.group.dailyMinutes),
+                text = if (status.group.timed) {
+                    stringResource(R.string.daily_minutes_value, status.group.dailyMinutes)
+                } else {
+                    stringResource(R.string.group_without_time)
+                },
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -448,9 +485,9 @@ private fun GroupHeader(
     }
     Spacer(Modifier.height(8.dp))
     Column(modifier = Modifier.clickable(onClick = onOpen)) {
-        if (targetSeconds > 0L) {
+        if (status.group.timed && targetSeconds > 0L) {
             LinearProgressIndicator(
-                progress = { progress },
+                progress = { timeProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(7.dp),
@@ -477,6 +514,36 @@ private fun GroupHeader(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
+        } else if (!status.group.timed && scheduledTasks > 0) {
+            LinearProgressIndicator(
+                progress = { taskProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(7.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.group_checklist_progress_value,
+                        completedTasks,
+                        scheduledTasks,
+                        taskProgressPercent,
+                    ),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(R.string.group_checklist_progress_remaining, remainingTasks),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         } else {
             Text(
                 text = stringResource(R.string.group_no_work_today),
@@ -493,6 +560,7 @@ private fun GroupHeader(
 @Composable
 private fun TaskRow(
     status: TaskStatus,
+    timedGroup: Boolean,
     onToggleEnabled: () -> Unit,
     onStartTaskAlone: () -> Unit,
     onMarkDone: () -> Unit,
@@ -502,12 +570,22 @@ private fun TaskRow(
     val enabled = status.task.enabled
     val scheduledToday = status.scheduledToday
     val appliesToday = enabled && scheduledToday
-    val hasRemainingWork = appliesToday && status.remainingSecondsToday > 0
-    val rowAlpha = if (appliesToday) 1f else 0.62f
-    val nameColor = if (appliesToday) MaterialTheme.colorScheme.onSurface
+    val visuallyPending = appliesToday && !status.completedToday
+    val hasRemainingWork = appliesToday && if (timedGroup) {
+        status.remainingSecondsToday > 0
+    } else {
+        !status.completedToday
+    }
+    val rowAlpha = if (visuallyPending) 1f else 0.62f
+    val nameColor = if (visuallyPending) MaterialTheme.colorScheme.onSurface
     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-    val secondaryColor = if (appliesToday) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+    val secondaryColor = if (visuallyPending) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
     else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+    val markDoneTint = if (hasRemainingWork) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        secondaryColor
+    }
 
     Card(
         modifier = Modifier
@@ -543,18 +621,20 @@ private fun TaskRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Text(
-                    text = formatWeight(status.task.weight),
-                    color = if (appliesToday) MaterialTheme.colorScheme.primary else secondaryColor,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.size(8.dp))
+                if (timedGroup) {
+                    Text(
+                        text = formatWeight(status.task.weight),
+                        color = if (visuallyPending) MaterialTheme.colorScheme.primary else secondaryColor,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                }
                 Switch(checked = enabled, onCheckedChange = { onToggleEnabled() })
             }
 
             Spacer(Modifier.height(6.dp))
 
-            if (appliesToday) {
+            if (timedGroup && appliesToday) {
                 val target = status.targetSecondsToday
                 val worked = status.workedSecondsToday
                 val progress = if (target > 0) (worked.toFloat() / target).coerceIn(0f, 1f) else 0f
@@ -575,26 +655,30 @@ private fun TaskRow(
                     text = when {
                         !enabled -> stringResource(R.string.task_paused)
                         !scheduledToday -> stringResource(R.string.task_not_scheduled_today)
+                        !timedGroup && status.completedToday -> stringResource(R.string.task_done_today)
+                        !timedGroup -> stringResource(R.string.task_pending_today)
                         else -> "${formatClock(status.workedSecondsToday)} / ${formatClock(status.targetSecondsToday)}"
                     },
                     fontSize = 12.sp,
-                    fontStyle = if (appliesToday) FontStyle.Normal else FontStyle.Italic,
-                    color = if (appliesToday) MaterialTheme.colorScheme.onSurface else secondaryColor,
+                    fontStyle = if (visuallyPending) FontStyle.Normal else FontStyle.Italic,
+                    color = if (visuallyPending) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(
-                    onClick = onStartTaskAlone,
-                    enabled = hasRemainingWork,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = stringResource(R.string.start_single_task),
-                        tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
-                        modifier = Modifier.size(18.dp),
-                    )
+                if (timedGroup) {
+                    IconButton(
+                        onClick = onStartTaskAlone,
+                        enabled = hasRemainingWork,
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = stringResource(R.string.start_single_task),
+                            tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.size(4.dp))
                 }
-                Spacer(Modifier.size(4.dp))
                 IconButton(
                     onClick = onMarkDone,
                     enabled = hasRemainingWork,
@@ -603,7 +687,7 @@ private fun TaskRow(
                     Icon(
                         Icons.Filled.CheckCircle,
                         contentDescription = stringResource(R.string.mark_task_done),
-                        tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
+                        tint = markDoneTint,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -664,7 +748,9 @@ private fun DisabledTasksToggle(
 private fun GroupActions(
     canStartWork: Boolean,
     onAddTask: (() -> Unit)? = null,
-    onStartWork: () -> Unit,
+    onStartWork: (() -> Unit)?,
+    startLabel: String? = null,
+    showStartIcon: Boolean = true,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -674,36 +760,48 @@ private fun GroupActions(
         if (onAddTask != null) {
             OutlinedButton(
                 onClick = onAddTask,
-                modifier = Modifier.height(52.dp),
+                modifier = if (onStartWork == null) {
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                } else {
+                    Modifier.height(52.dp)
+                },
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Spacer(Modifier.size(6.dp))
                 Text(stringResource(R.string.add_task_short))
             }
-            Spacer(Modifier.weight(1f))
+            if (onStartWork != null) {
+                Spacer(Modifier.weight(1f))
+            }
         }
-        Button(
-            onClick = onStartWork,
-            enabled = canStartWork,
-            modifier = if (onAddTask == null) {
-                Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-            } else {
-                Modifier.height(52.dp)
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ),
-        ) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = null)
-            Spacer(Modifier.size(6.dp))
-            Text(
-                text = if (canStartWork) stringResource(R.string.start_work)
-                else stringResource(R.string.all_done_today),
-                fontWeight = FontWeight.Bold,
-            )
+        if (onStartWork != null) {
+            Button(
+                onClick = onStartWork,
+                enabled = canStartWork,
+                modifier = if (onAddTask == null) {
+                    Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                } else {
+                    Modifier.height(52.dp)
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            ) {
+                if (showStartIcon) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.size(6.dp))
+                }
+                Text(
+                    text = startLabel ?: if (canStartWork) stringResource(R.string.start_work)
+                    else stringResource(R.string.all_done_today),
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
@@ -727,14 +825,16 @@ private fun GroupEditDialog(
     title: String,
     initialName: String,
     initialDailyMinutes: Int,
-    onSave: (name: String, dailyMinutes: Int) -> Unit,
+    initialTimed: Boolean,
+    onSave: (name: String, dailyMinutes: Int, timed: Boolean) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
     var minutesText by remember { mutableStateOf(initialDailyMinutes.toString()) }
+    var timed by remember { mutableStateOf(initialTimed) }
 
     val parsedMinutes = minutesText.toIntOrNull()
-    val canSave = name.isNotBlank() && parsedMinutes != null && parsedMinutes > 0
+    val canSave = name.isNotBlank() && (!timed || (parsedMinutes != null && parsedMinutes > 0))
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -751,19 +851,29 @@ private fun GroupEditDialog(
                     ),
                 )
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = minutesText,
-                    onValueChange = { v -> minutesText = v.filter { it.isDigit() } },
-                    label = { Text(stringResource(R.string.minutes_per_day)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.group_timed),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = timed, onCheckedChange = { timed = it })
+                }
+                if (timed) {
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = minutesText,
+                        onValueChange = { v -> minutesText = v.filter { it.isDigit() } },
+                        label = { Text(stringResource(R.string.minutes_per_day)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
                 enabled = canSave,
-                onClick = { onSave(name, parsedMinutes ?: 1) },
+                onClick = { onSave(name, parsedMinutes ?: initialDailyMinutes.coerceAtLeast(1), timed) },
             ) {
                 Text(stringResource(R.string.save))
             }
@@ -784,6 +894,7 @@ private fun TaskEditDialog(
     initialWeight: Double,
     initialEnabled: Boolean,
     initialScheduledDays: Int,
+    timedGroup: Boolean,
     onSave: (name: String, description: String, weight: Double, enabled: Boolean, scheduledDays: Int) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -795,7 +906,9 @@ private fun TaskEditDialog(
 
     val parsedWeight = parseWeight(weightText)
     val hasScheduledDays = (scheduledDays and Task.ALL_DAYS_MASK) != 0
-    val canSave = name.isNotBlank() && parsedWeight != null && parsedWeight > 0.0 && hasScheduledDays
+    val canSave = name.isNotBlank() &&
+        (!timedGroup || (parsedWeight != null && parsedWeight > 0.0)) &&
+        hasScheduledDays
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -828,14 +941,16 @@ private fun TaskEditDialog(
                     ),
                 )
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = weightText,
-                    onValueChange = { v -> weightText = sanitizeWeightInput(v) },
-                    label = { Text(stringResource(R.string.task_weight)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                )
-                Spacer(Modifier.height(12.dp))
+                if (timedGroup) {
+                    OutlinedTextField(
+                        value = weightText,
+                        onValueChange = { v -> weightText = sanitizeWeightInput(v) },
+                        label = { Text(stringResource(R.string.task_weight)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = stringResource(R.string.task_enabled),
@@ -853,7 +968,15 @@ private fun TaskEditDialog(
         confirmButton = {
             TextButton(
                 enabled = canSave,
-                onClick = { onSave(name, description, parsedWeight ?: 1.0, enabled, scheduledDays) },
+                onClick = {
+                    onSave(
+                        name,
+                        description,
+                        if (timedGroup) parsedWeight ?: 1.0 else 1.0,
+                        enabled,
+                        scheduledDays,
+                    )
+                },
             ) {
                 Text(stringResource(R.string.save))
             }

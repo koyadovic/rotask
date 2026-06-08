@@ -5,6 +5,8 @@
     <string name="home_title">Rotask</string>
     <string name="daily_minutes_value">%1$d min/day</string>
     <string name="minutes_per_day">Minutes per day</string>
+    <string name="group_timed">Use timer</string>
+    <string name="group_without_time">No timer</string>
 
     <string name="empty_groups">No groups yet. Create one to start.</string>
     <string name="group_empty">No tasks in this group yet.</string>
@@ -15,6 +17,8 @@
     <string name="group_name">Name</string>
     <string name="group_progress_value">%1$s / %2$s</string>
     <string name="group_progress_remaining">%1$s left</string>
+    <string name="group_checklist_progress_value">%1$d / %2$d tasks (%3$d%%)</string>
+    <string name="group_checklist_progress_remaining">%1$d left</string>
     <string name="group_no_work_today">No tasks scheduled today</string>
     <string name="delete_group_confirm_empty">Delete %1$s?</string>
     <string name="delete_group_confirm_with_tasks">Deleting %1$s also removes its %2$d task(s) and their history.</string>
@@ -28,10 +32,13 @@
     <string name="task_weight">Weight</string>
     <string name="task_enabled">Active in rotation</string>
     <string name="task_paused">Paused</string>
+    <string name="task_done_today">Done today</string>
+    <string name="task_pending_today">Pending today</string>
     <string name="show_disabled_tasks">Show disabled (%1$d)</string>
     <string name="hide_disabled_tasks">Hide disabled (%1$d)</string>
 
     <string name="start_work">Start work</string>
+    <string name="view_tasks">View tasks</string>
     <string name="all_done_today">All done for today</string>
 
     <string name="save">Save</string>

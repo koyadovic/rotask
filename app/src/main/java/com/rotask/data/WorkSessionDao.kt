@@ -13,6 +13,9 @@ interface WorkSessionDao {
     @Query("SELECT IFNULL(SUM(durationSeconds), 0) FROM work_sessions WHERE taskId = :taskId AND date = :date")
     suspend fun totalForDate(taskId: Long, date: String): Long
 
+    @Query("SELECT COUNT(*) FROM work_sessions WHERE taskId = :taskId AND date = :date")
+    suspend fun countForDate(taskId: Long, date: String): Int
+
     @Query("SELECT * FROM work_sessions ORDER BY date, id")
     suspend fun getAll(): List<WorkSession>
 

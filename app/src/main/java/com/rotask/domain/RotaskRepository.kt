@@ -25,9 +25,11 @@ class RotaskRepository(
 
     suspend fun groupStatuses(): List<GroupStatus> = scheduler.computeGroupStatuses(clock())
 
-    suspend fun statusForTask(taskId: Long): TaskStatus? {
+    suspend fun statusForTask(taskId: Long): TaskStatus? = statusForTask(taskId, clock())
+
+    private suspend fun statusForTask(taskId: Long, today: LocalDate): TaskStatus? {
         val task = db.taskDao().get(taskId) ?: return null
-        return groupStatuses()
+        return scheduler.computeGroupStatuses(today)
             .firstOrNull { it.group.id == task.groupId }
             ?.statuses
             ?.firstOrNull { it.task.id == taskId }
@@ -39,12 +41,23 @@ class RotaskRepository(
     suspend fun pickNextInGroupExcluding(groupId: Long, excludeTaskId: Long): TaskStatus? =
         scheduler.pickNextInGroup(groupId, clock(), excludeTaskId)
 
-    suspend fun addGroup(name: String, dailyMinutes: Int) {
-        db.groupDao().insert(Group(name = name.trim(), dailyMinutes = dailyMinutes.coerceAtLeast(1)))
+    suspend fun addGroup(name: String, dailyMinutes: Int, timed: Boolean) {
+        db.groupDao().insert(
+            Group(
+                name = name.trim(),
+                dailyMinutes = dailyMinutes.coerceAtLeast(1),
+                timed = timed,
+            )
+        )
     }
 
     suspend fun updateGroup(group: Group) {
-        db.groupDao().update(group)
+        db.groupDao().update(
+            group.copy(
+                name = group.name.trim(),
+                dailyMinutes = group.dailyMinutes.coerceAtLeast(1),
+            )
+        )
     }
 
     suspend fun deleteGroup(group: Group) {
@@ -93,6 +106,19 @@ class RotaskRepository(
         scheduler.recordWork(taskId, seconds, clock())
     }
 
+    suspend fun markTaskDone(taskId: Long) {
+        val today = clock()
+        val status = statusForTask(taskId, today) ?: return
+        if (!status.task.enabled || !status.scheduledToday) return
+        if (status.timed) {
+            if (status.remainingSecondsToday > 0L) {
+                scheduler.recordWork(taskId, status.remainingSecondsToday, today)
+            }
+        } else if (!status.completedToday) {
+            scheduler.recordCompletion(taskId, today)
+        }
+    }
+
     suspend fun exportBackupJson(): String {
         val groups = db.groupDao().getAll()
         val tasks = db.taskDao().getAll()
@@ -104,6 +130,7 @@ class RotaskRepository(
                     .put("id", group.id)
                     .put("name", group.name)
                     .put("dailyMinutes", group.dailyMinutes)
+                    .put("timed", group.timed)
             })
             .put("tasks", tasks.toJsonArray { task ->
                 JSONObject()
@@ -147,6 +174,7 @@ class RotaskRepository(
                 id = obj.getLong("id"),
                 name = obj.getString("name"),
                 dailyMinutes = obj.getInt("dailyMinutes").coerceAtLeast(1),
+                timed = obj.optBoolean("timed", true),
             )
         }
         val groupIds = groups.map { it.id }.toSet()

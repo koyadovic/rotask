@@ -5,6 +5,8 @@
     <string name="home_title">Rotask</string>
     <string name="daily_minutes_value">%1$d min/día</string>
     <string name="minutes_per_day">Minutos por día</string>
+    <string name="group_timed">Usar temporizador</string>
+    <string name="group_without_time">Sin tiempo</string>
 
     <string name="empty_groups">Aún no hay grupos. Crea uno para empezar.</string>
     <string name="group_empty">Aún no hay tareas en este grupo.</string>
@@ -15,6 +17,8 @@
     <string name="group_name">Nombre</string>
     <string name="group_progress_value">%1$s / %2$s</string>
     <string name="group_progress_remaining">Quedan %1$s</string>
+    <string name="group_checklist_progress_value">%1$d / %2$d tareas (%3$d%%)</string>
+    <string name="group_checklist_progress_remaining">Quedan %1$d</string>
     <string name="group_no_work_today">Sin tareas programadas hoy</string>
     <string name="delete_group_confirm_empty">¿Eliminar %1$s?</string>
     <string name="delete_group_confirm_with_tasks">Al eliminar %1$s borrarás también sus %2$d tarea(s) y su historial.</string>
@@ -28,10 +32,13 @@
     <string name="task_weight">Peso</string>
     <string name="task_enabled">Activa en la rotación</string>
     <string name="task_paused">Pausada</string>
+    <string name="task_done_today">Realizada hoy</string>
+    <string name="task_pending_today">Pendiente hoy</string>
     <string name="show_disabled_tasks">Mostrar desactivadas (%1$d)</string>
     <string name="hide_disabled_tasks">Ocultar desactivadas (%1$d)</string>
 
     <string name="start_work">Iniciar trabajo</string>
+    <string name="view_tasks">Ver tareas</string>
     <string name="all_done_today">Por hoy, todo cumplido</string>
 
     <string name="save">Guardar</string>

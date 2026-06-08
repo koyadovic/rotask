@@ -93,6 +93,12 @@ val MIGRATION_5_6: Migration = object : Migration(5, 6) {
     }
 }
 
+val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `groups` ADD COLUMN `timed` INTEGER NOT NULL DEFAULT 1")
+    }
+}
+
 val MIGRATION_3_4: Migration = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

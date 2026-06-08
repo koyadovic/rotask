@@ -8,7 +8,9 @@ import java.time.LocalDate
 
 data class TaskStatus(
     val task: Task,
+    val timed: Boolean,
     val scheduledToday: Boolean,
+    val completedToday: Boolean,
     val targetSecondsToday: Long,
     val workedSecondsToday: Long,
     val remainingSecondsToday: Long,
@@ -26,8 +28,16 @@ data class GroupStatus(
 ) {
     val totalTargetSeconds: Long get() = statuses.sumOf { it.targetSecondsToday }
     val totalWorkedSeconds: Long get() = statuses.sumOf { it.workedSecondsToday }
+    val scheduledTaskCountToday: Int
+        get() = statuses.count { it.task.enabled && it.scheduledToday }
+    val completedTaskCountToday: Int
+        get() = statuses.count { it.task.enabled && it.scheduledToday && it.completedToday }
     val hasWorkRemaining: Boolean
-        get() = statuses.any { it.task.enabled && it.scheduledToday && it.remainingSecondsToday > 0 }
+        get() = if (group.timed) {
+            statuses.any { it.task.enabled && it.scheduledToday && it.remainingSecondsToday > 0 }
+        } else {
+            statuses.any { it.task.enabled && it.scheduledToday && !it.completedToday }
+        }
 }
 
 class TaskScheduler(private val db: AppDatabase) {
@@ -40,21 +50,38 @@ class TaskScheduler(private val db: AppDatabase) {
             val sumWeights = enabledTasks.sumOf { it.weight }
             val totalSecs = group.dailyMinutes * 60L
             val statuses = tasks.map { t ->
-                val worked = db.workSessionDao().totalForDate(t.id, today.toString())
                 val scheduledToday = t.isScheduledOn(today.dayOfWeek)
-                if (t.enabled && scheduledToday && sumWeights > 0.0) {
-                    val target = (totalSecs * t.weight / sumWeights).toLong()
+                if (!group.timed) {
+                    val completed = db.workSessionDao().countForDate(t.id, today.toString()) > 0
                     TaskStatus(
                         task = t,
+                        timed = false,
                         scheduledToday = scheduledToday,
+                        completedToday = completed,
+                        targetSecondsToday = 0L,
+                        workedSecondsToday = 0L,
+                        remainingSecondsToday = 0L,
+                    )
+                } else if (t.enabled && scheduledToday && sumWeights > 0.0) {
+                    val worked = db.workSessionDao().totalForDate(t.id, today.toString())
+                    val target = (totalSecs * t.weight / sumWeights).toLong()
+                    val remaining = (target - worked).coerceAtLeast(0)
+                    TaskStatus(
+                        task = t,
+                        timed = true,
+                        scheduledToday = scheduledToday,
+                        completedToday = target > 0L && remaining == 0L,
                         targetSecondsToday = target,
                         workedSecondsToday = worked,
-                        remainingSecondsToday = (target - worked).coerceAtLeast(0)
+                        remainingSecondsToday = remaining
                     )
                 } else {
+                    val worked = db.workSessionDao().totalForDate(t.id, today.toString())
                     TaskStatus(
                         task = t,
+                        timed = true,
                         scheduledToday = scheduledToday,
+                        completedToday = false,
                         targetSecondsToday = 0L,
                         workedSecondsToday = worked,
                         remainingSecondsToday = 0L,
@@ -85,6 +112,14 @@ class TaskScheduler(private val db: AppDatabase) {
         if (seconds <= 0) return
         db.workSessionDao().insert(
             WorkSession(taskId = taskId, date = today.toString(), durationSeconds = seconds)
+        )
+    }
+
+    suspend fun recordCompletion(taskId: Long, today: LocalDate) {
+        val date = today.toString()
+        if (db.workSessionDao().countForDate(taskId, date) > 0) return
+        db.workSessionDao().insert(
+            WorkSession(taskId = taskId, date = date, durationSeconds = 0L)
         )
     }
 
