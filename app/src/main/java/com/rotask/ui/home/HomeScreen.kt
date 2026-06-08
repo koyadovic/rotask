@@ -138,7 +138,7 @@ fun HomeScreen(
                         item(key = "actions-${groupStatus.group.id}") {
                             Spacer(Modifier.height(10.dp))
                             GroupActions(
-                                canStartWork = if (groupStatus.group.timed) groupStatus.hasWorkRemaining else true,
+                                canStartWork = groupStatus.hasWorkRemaining,
                                 onStartWork = {
                                     if (groupStatus.group.timed) {
                                         vm.startWorkInGroup(groupStatus.group.id)
@@ -797,8 +797,11 @@ private fun GroupActions(
                     Spacer(Modifier.size(6.dp))
                 }
                 Text(
-                    text = startLabel ?: if (canStartWork) stringResource(R.string.start_work)
-                    else stringResource(R.string.all_done_today),
+                    text = if (!canStartWork) {
+                        stringResource(R.string.all_done_today)
+                    } else {
+                        startLabel ?: stringResource(R.string.start_work)
+                    },
                     fontWeight = FontWeight.Bold,
                 )
             }
