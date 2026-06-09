@@ -41,6 +41,9 @@ class RotaskRepository(
     suspend fun pickNextInGroupExcluding(groupId: Long, excludeTaskId: Long): TaskStatus? =
         scheduler.pickNextInGroup(groupId, clock(), excludeTaskId)
 
+    suspend fun pickNextInGroupExcluding(groupId: Long, excludeTaskIds: Set<Long>): TaskStatus? =
+        scheduler.pickNextInGroup(groupId, clock(), excludeTaskIds)
+
     suspend fun addGroup(name: String, dailyMinutes: Int, timed: Boolean) {
         db.groupDao().insert(
             Group(

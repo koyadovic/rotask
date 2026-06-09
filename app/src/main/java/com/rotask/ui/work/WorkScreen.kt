@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -62,16 +63,26 @@ fun WorkScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
             } else {
-                WorkBody(
-                    taskName = state.taskName,
-                    taskDescription = state.taskDescription,
-                    elapsedSeconds = state.sessionElapsedSeconds,
-                    targetSeconds = state.sessionTargetSeconds,
-                    paused = state.paused,
-                    onPauseToggle = { vm.togglePause() },
-                    onSkip = { vm.skip() },
-                    onStop = { vm.stop() }
-                )
+                if (state.timed) {
+                    WorkBody(
+                        taskName = state.taskName,
+                        taskDescription = state.taskDescription,
+                        elapsedSeconds = state.sessionElapsedSeconds,
+                        targetSeconds = state.sessionTargetSeconds,
+                        paused = state.paused,
+                        onPauseToggle = { vm.togglePause() },
+                        onSkip = { vm.skip() },
+                        onStop = { vm.stop() }
+                    )
+                } else {
+                    UntimedWorkBody(
+                        taskName = state.taskName,
+                        taskDescription = state.taskDescription,
+                        onMarkDone = { vm.markDone() },
+                        onSkip = { vm.skip() },
+                        onStop = { vm.stop() },
+                    )
+                }
             }
         }
     }
@@ -202,6 +213,91 @@ private fun WorkBody(
             }
             Text(
                 text = label,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UntimedWorkBody(
+    taskName: String,
+    taskDescription: String,
+    onMarkDone: () -> Unit,
+    onSkip: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = taskName,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+            )
+            if (taskDescription.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = taskDescription,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onSkip,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+            ) {
+                Icon(Icons.Filled.SkipNext, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.skip_work))
+            }
+            OutlinedButton(
+                onClick = onStop,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+            ) {
+                Icon(Icons.Filled.Stop, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.stop_work))
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onMarkDone,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Text(
+                text = stringResource(R.string.mark_task_done),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
             )

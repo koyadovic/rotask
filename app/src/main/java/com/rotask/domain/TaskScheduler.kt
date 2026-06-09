@@ -96,13 +96,35 @@ class TaskScheduler(private val db: AppDatabase) {
         groupId: Long,
         today: LocalDate,
         excludeTaskId: Long? = null,
+    ): TaskStatus? = pickNextInGroup(
+        groupId = groupId,
+        today = today,
+        excludeTaskIds = setOfNotNull(excludeTaskId),
+    )
+
+    suspend fun pickNextInGroup(
+        groupId: Long,
+        today: LocalDate,
+        excludeTaskIds: Set<Long>,
     ): TaskStatus? {
-        val candidates = computeGroupStatuses(today)
+        val groupStatus = computeGroupStatuses(today)
             .firstOrNull { it.group.id == groupId }
-            ?.statuses
-            ?.filter { it.task.enabled && it.scheduledToday && it.remainingSecondsToday > 0 && it.task.id != excludeTaskId }
             ?: return null
+        val candidates = groupStatus.statuses
+            .filter {
+                it.task.enabled &&
+                    it.scheduledToday &&
+                    it.task.id !in excludeTaskIds &&
+                    if (groupStatus.group.timed) {
+                        it.remainingSecondsToday > 0
+                    } else {
+                        !it.completedToday
+                    }
+            }
         if (candidates.isEmpty()) return null
+        if (!groupStatus.group.timed) {
+            return candidates.minWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.task.name })
+        }
         val maxPct = candidates.maxOf { it.percentIncomplete }
         val topTier = candidates.filter { it.percentIncomplete >= maxPct - PCT_EPSILON }
         return topTier.random()

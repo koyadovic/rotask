@@ -139,15 +139,7 @@ fun HomeScreen(
                             Spacer(Modifier.height(10.dp))
                             GroupActions(
                                 canStartWork = groupStatus.hasWorkRemaining,
-                                onStartWork = {
-                                    if (groupStatus.group.timed) {
-                                        vm.startWorkInGroup(groupStatus.group.id)
-                                    } else {
-                                        onOpenGroup(groupStatus.group.id)
-                                    }
-                                },
-                                startLabel = if (groupStatus.group.timed) null else stringResource(R.string.view_tasks),
-                                showStartIcon = groupStatus.group.timed,
+                                onStartWork = { vm.startWorkInGroup(groupStatus.group.id) },
                             )
                             Spacer(Modifier.height(24.dp))
                         }
@@ -331,11 +323,7 @@ fun GroupTasksScreen(
                     GroupActions(
                         canStartWork = groupStatus.hasWorkRemaining,
                         onAddTask = { vm.showAddTaskFor(groupStatus.group) },
-                        onStartWork = if (groupStatus.group.timed) {
-                            { vm.startWorkInGroup(groupStatus.group.id) }
-                        } else {
-                            null
-                        },
+                        onStartWork = { vm.startWorkInGroup(groupStatus.group.id) },
                     )
                     Spacer(Modifier.height(16.dp))
                 }
@@ -749,8 +737,6 @@ private fun GroupActions(
     canStartWork: Boolean,
     onAddTask: (() -> Unit)? = null,
     onStartWork: (() -> Unit)?,
-    startLabel: String? = null,
-    showStartIcon: Boolean = true,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -792,15 +778,13 @@ private fun GroupActions(
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
             ) {
-                if (showStartIcon) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.size(6.dp))
-                }
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.size(6.dp))
                 Text(
                     text = if (!canStartWork) {
                         stringResource(R.string.all_done_today)
                     } else {
-                        startLabel ?: stringResource(R.string.start_work)
+                        stringResource(R.string.start_work)
                     },
                     fontWeight = FontWeight.Bold,
                 )

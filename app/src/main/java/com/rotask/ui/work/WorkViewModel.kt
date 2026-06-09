@@ -23,6 +23,7 @@ data class WorkUiState(
     val loading: Boolean = true,
     val taskName: String = "",
     val taskDescription: String = "",
+    val timed: Boolean = true,
     val sessionTargetSeconds: Long = 0L,
     val sessionElapsedSeconds: Long = 0L,
     val paused: Boolean = false,
@@ -49,6 +50,7 @@ class WorkViewModel(
     private var runningStartedAtMillis: Long? = null
     private var completionAlarmScheduled: Boolean = false
     private var keepCompletionAlarmOnClear: Boolean = false
+    private val skippedUntimedTaskIds = mutableSetOf<Long>()
     private val persisted = AtomicBoolean(false)
 
     init {
@@ -64,7 +66,13 @@ class WorkViewModel(
         completionAlarmScheduled = false
         keepCompletionAlarmOnClear = false
         val status = repo.statusForTask(taskId)
-        if (status == null || !status.timed || !status.task.enabled || status.remainingSecondsToday <= 0) {
+        if (
+            status == null ||
+            !status.task.enabled ||
+            !status.scheduledToday ||
+            (status.timed && status.remainingSecondsToday <= 0) ||
+            (!status.timed && status.completedToday)
+        ) {
             _state.value = WorkUiState(loading = false, noWorkNeeded = true, finished = true)
             return
         }
@@ -75,6 +83,7 @@ class WorkViewModel(
             loading = false,
             taskName = status.task.name,
             taskDescription = status.task.description,
+            timed = status.timed,
             sessionTargetSeconds = status.remainingSecondsToday,
             sessionElapsedSeconds = 0L,
             paused = true,
@@ -101,6 +110,11 @@ class WorkViewModel(
     private enum class AdvanceReason { AUTO_COMPLETED, SKIPPED }
 
     private fun advanceToNext(reason: AdvanceReason) {
+        val state = _state.value
+        if (!state.timed && reason == AdvanceReason.AUTO_COMPLETED) {
+            markCurrentUntimedDone()
+            return
+        }
         timerJob?.cancel()
         val current = syncElapsedWithClock(capAtTarget = true)
         accumulatedElapsedSeconds = current.sessionElapsedSeconds
@@ -136,7 +150,7 @@ class WorkViewModel(
 
     fun togglePause() {
         val current = _state.value
-        if (current.finished || current.loading) return
+        if (current.finished || current.loading || !current.timed) return
         if (current.paused) {
             accumulatedElapsedSeconds = current.sessionElapsedSeconds
             runningStartedAtMillis = SystemClock.elapsedRealtime()
@@ -160,13 +174,28 @@ class WorkViewModel(
     fun skip() {
         val current = _state.value
         if (current.finished || current.loading) return
+        if (!current.timed) {
+            skipCurrentUntimed()
+            return
+        }
         advanceToNext(reason = AdvanceReason.SKIPPED)
+    }
+
+    fun markDone() {
+        val current = _state.value
+        if (current.finished || current.loading) return
+        if (current.timed) return
+        markCurrentUntimedDone()
     }
 
     fun stop() {
         timerJob?.cancel()
         cancelCompletionAlarm()
-        val elapsed = syncElapsedWithClock(capAtTarget = true).sessionElapsedSeconds
+        val elapsed = if (_state.value.timed) {
+            syncElapsedWithClock(capAtTarget = true).sessionElapsedSeconds
+        } else {
+            0L
+        }
         accumulatedElapsedSeconds = elapsed
         runningStartedAtMillis = null
         persistOnce(elapsed)
@@ -178,8 +207,49 @@ class WorkViewModel(
         if (!keepCompletionAlarmOnClear) {
             cancelCompletionAlarm()
         }
-        val elapsed = syncElapsedWithClock(capAtTarget = true).sessionElapsedSeconds
+        val elapsed = if (_state.value.timed) {
+            syncElapsedWithClock(capAtTarget = true).sessionElapsedSeconds
+        } else {
+            0L
+        }
         persistOnce(elapsed)
+    }
+
+    private fun markCurrentUntimedDone() {
+        timerJob?.cancel()
+        cancelCompletionAlarm()
+        val finishedTaskId = currentTaskId
+        val groupId = currentGroupId
+        viewModelScope.launch {
+            repo.markTaskDone(finishedTaskId)
+            persisted.set(true)
+            if (mode == WorkMode.SINGLE_TASK) {
+                _state.update { it.copy(finished = true) }
+                return@launch
+            }
+            val next = repo.pickNextInGroupExcluding(groupId, skippedUntimedTaskIds + finishedTaskId)
+            if (next == null) {
+                _state.update { it.copy(finished = true) }
+                return@launch
+            }
+            loadTask(next.task.id, resetPersistFlag = true)
+        }
+    }
+
+    private fun skipCurrentUntimed() {
+        timerJob?.cancel()
+        cancelCompletionAlarm()
+        val skippedTaskId = currentTaskId
+        val groupId = currentGroupId
+        skippedUntimedTaskIds += skippedTaskId
+        viewModelScope.launch {
+            val next = repo.pickNextInGroupExcluding(groupId, skippedUntimedTaskIds)
+            if (next == null) {
+                _state.update { it.copy(finished = true) }
+                return@launch
+            }
+            loadTask(next.task.id, resetPersistFlag = true)
+        }
     }
 
     private fun scheduleCompletionAlarm(current: WorkUiState) {
