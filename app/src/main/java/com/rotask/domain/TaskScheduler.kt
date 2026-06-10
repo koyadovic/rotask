@@ -49,6 +49,11 @@ class TaskScheduler(private val db: AppDatabase) {
             val enabledTasks = tasks.filter { it.enabled && it.isScheduledOn(today.dayOfWeek) }
             val sumWeights = enabledTasks.sumOf { it.weight }
             val totalSecs = group.dailyMinutes * 60L
+            val targetSecondsByTaskId = if (group.timed && sumWeights > 0.0) {
+                allocateTargetSeconds(enabledTasks, totalSecs, sumWeights)
+            } else {
+                emptyMap()
+            }
             val statuses = tasks.map { t ->
                 val scheduledToday = t.isScheduledOn(today.dayOfWeek)
                 if (!group.timed) {
@@ -64,7 +69,7 @@ class TaskScheduler(private val db: AppDatabase) {
                     )
                 } else if (t.enabled && scheduledToday && sumWeights > 0.0) {
                     val worked = db.workSessionDao().totalForDate(t.id, today.toString())
-                    val target = (totalSecs * t.weight / sumWeights).toLong()
+                    val target = targetSecondsByTaskId[t.id] ?: 0L
                     val remaining = (target - worked).coerceAtLeast(0)
                     TaskStatus(
                         task = t,
@@ -143,6 +148,44 @@ class TaskScheduler(private val db: AppDatabase) {
         db.workSessionDao().insert(
             WorkSession(taskId = taskId, date = date, durationSeconds = 0L)
         )
+    }
+
+    private fun allocateTargetSeconds(
+        tasks: List<Task>,
+        totalSeconds: Long,
+        sumWeights: Double,
+    ): Map<Long, Long> {
+        if (tasks.isEmpty() || totalSeconds <= 0L || sumWeights <= 0.0) return emptyMap()
+
+        data class TargetPart(
+            val task: Task,
+            val baseSeconds: Long,
+            val fractionalRemainder: Double,
+        )
+
+        val parts = tasks.map { task ->
+            val rawSeconds = totalSeconds * task.weight / sumWeights
+            val baseSeconds = rawSeconds.toLong()
+            TargetPart(
+                task = task,
+                baseSeconds = baseSeconds,
+                fractionalRemainder = rawSeconds - baseSeconds,
+            )
+        }
+        val remainingSeconds = (totalSeconds - parts.sumOf { it.baseSeconds }).coerceAtLeast(0L)
+        val extraSecondTaskIds = parts
+            .sortedWith(
+                compareByDescending<TargetPart> { it.fractionalRemainder }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.task.name }
+                    .thenBy { it.task.id }
+            )
+            .take(remainingSeconds.toInt())
+            .map { it.task.id }
+            .toSet()
+
+        return parts.associate { part ->
+            part.task.id to part.baseSeconds + if (part.task.id in extraSecondTaskIds) 1L else 0L
+        }
     }
 
     companion object {

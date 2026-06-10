@@ -290,17 +290,23 @@ private fun UntimedWorkBody(
                 contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
-            Icon(
-                imageVector = Icons.Filled.CheckCircle,
-                contentDescription = null,
-                modifier = Modifier.size(28.dp),
-            )
-            Spacer(Modifier.size(10.dp))
-            Text(
-                text = stringResource(R.string.mark_task_done),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                )
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    text = stringResource(R.string.mark_task_done_short),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }

@@ -67,6 +67,7 @@
     <string name="target">Today\'s target</string>
     <string name="start_single_task">Start only this task</string>
     <string name="mark_task_done">Mark task complete</string>
+    <string name="mark_task_done_short">Done</string>
     <string name="task_schedule">Days</string>
     <string name="task_schedule_every_day">Every day</string>
     <string name="task_schedule_no_days">No days</string>
