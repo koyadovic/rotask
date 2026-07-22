@@ -32,11 +32,17 @@ data class GroupStatus(
         get() = statuses.count { it.task.enabled && it.scheduledToday }
     val completedTaskCountToday: Int
         get() = statuses.count { it.task.enabled && it.scheduledToday && it.completedToday }
+    val ephemeralTaskCountToday: Int
+        get() = statuses.count { it.task.enabled && it.scheduledToday && it.task.isEphemeral }
+    val completedEphemeralTaskCountToday: Int
+        get() = statuses.count {
+            it.task.enabled && it.scheduledToday && it.task.isEphemeral && it.completedToday
+        }
     val hasWorkRemaining: Boolean
-        get() = if (group.timed) {
-            statuses.any { it.task.enabled && it.scheduledToday && it.remainingSecondsToday > 0 }
-        } else {
-            statuses.any { it.task.enabled && it.scheduledToday && !it.completedToday }
+        get() = statuses.any {
+            it.task.enabled &&
+                it.scheduledToday &&
+                if (it.timed) it.remainingSecondsToday > 0 else !it.completedToday
         }
 }
 
@@ -45,8 +51,10 @@ class TaskScheduler(private val db: AppDatabase) {
     suspend fun computeGroupStatuses(today: LocalDate): List<GroupStatus> {
         val groups = db.groupDao().getAll()
         return groups.map { group ->
-            val tasks = db.taskDao().getAllInGroup(group.id)
-            val enabledTasks = tasks.filter { it.enabled && it.isScheduledOn(today.dayOfWeek) }
+            val tasks = db.taskDao().getAllInGroup(group.id).filter { it.isAvailableOn(today) }
+            val enabledTasks = tasks.filter {
+                it.enabled && !it.isEphemeral && it.isScheduledOn(today)
+            }
             val sumWeights = enabledTasks.sumOf { it.weight }
             val totalSecs = group.dailyMinutes * 60L
             val targetSecondsByTaskId = if (group.timed && sumWeights > 0.0) {
@@ -55,8 +63,9 @@ class TaskScheduler(private val db: AppDatabase) {
                 emptyMap()
             }
             val statuses = tasks.map { t ->
-                val scheduledToday = t.isScheduledOn(today.dayOfWeek)
-                if (!group.timed) {
+                val scheduledToday = t.isScheduledOn(today)
+                val timedTask = group.timed && !t.isEphemeral
+                if (!timedTask) {
                     val completed = db.workSessionDao().countForDate(t.id, today.toString()) > 0
                     TaskStatus(
                         task = t,
@@ -120,18 +129,19 @@ class TaskScheduler(private val db: AppDatabase) {
                 it.task.enabled &&
                     it.scheduledToday &&
                     it.task.id !in excludeTaskIds &&
-                    if (groupStatus.group.timed) {
+                    if (it.timed) {
                         it.remainingSecondsToday > 0
                     } else {
                         !it.completedToday
                     }
             }
         if (candidates.isEmpty()) return null
-        if (!groupStatus.group.timed) {
+        val timedCandidates = candidates.filter { it.timed }
+        if (timedCandidates.isEmpty()) {
             return candidates.minWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.task.name })
         }
-        val maxPct = candidates.maxOf { it.percentIncomplete }
-        val topTier = candidates.filter { it.percentIncomplete >= maxPct - PCT_EPSILON }
+        val maxPct = timedCandidates.maxOf { it.percentIncomplete }
+        val topTier = timedCandidates.filter { it.percentIncomplete >= maxPct - PCT_EPSILON }
         return topTier.random()
     }
 

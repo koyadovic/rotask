@@ -126,6 +126,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         weight: Double,
         enabled: Boolean,
         scheduledDays: Int,
+        ephemeral: Boolean,
     ) {
         viewModelScope.launch {
             repo.addTask(
@@ -135,6 +136,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                 weight = sanitizeWeight(weight),
                 enabled = enabled,
                 scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
+                ephemeral = ephemeral,
             )
             dismissDialogs()
         }

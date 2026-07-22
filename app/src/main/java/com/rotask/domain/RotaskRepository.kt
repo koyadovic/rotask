@@ -20,10 +20,14 @@ class RotaskRepository(
     fun observeWorkSessionsTick() = db.workSessionDao().observeCount()
 
     suspend fun bootstrap() {
-        // Nothing to bootstrap: groups and tasks are created by the user.
+        cleanupExpiredEphemeralTasks(clock())
     }
 
-    suspend fun groupStatuses(): List<GroupStatus> = scheduler.computeGroupStatuses(clock())
+    suspend fun groupStatuses(): List<GroupStatus> {
+        val today = clock()
+        cleanupExpiredEphemeralTasks(today)
+        return scheduler.computeGroupStatuses(today)
+    }
 
     suspend fun statusForTask(taskId: Long): TaskStatus? = statusForTask(taskId, clock())
 
@@ -79,6 +83,7 @@ class RotaskRepository(
         weight: Double,
         enabled: Boolean,
         scheduledDays: Int,
+        ephemeral: Boolean,
     ) {
         db.taskDao().insert(
             Task(
@@ -86,8 +91,9 @@ class RotaskRepository(
                 name = name,
                 description = description,
                 weight = weight,
-                enabled = enabled,
+                enabled = if (ephemeral) true else enabled,
                 scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
+                ephemeralDate = if (ephemeral) clock().toString() else null,
             )
         )
     }
@@ -123,6 +129,7 @@ class RotaskRepository(
     }
 
     suspend fun exportBackupJson(): String {
+        cleanupExpiredEphemeralTasks(clock())
         val groups = db.groupDao().getAll()
         val tasks = db.taskDao().getAll()
         val workSessions = db.workSessionDao().getAll()
@@ -144,6 +151,7 @@ class RotaskRepository(
                     .put("weight", task.weight)
                     .put("enabled", task.enabled)
                     .put("scheduledDays", Task.sanitizedScheduledDays(task.scheduledDays))
+                    .put("ephemeralDate", task.ephemeralDate ?: JSONObject.NULL)
             })
             .put("workSessions", workSessions.toJsonArray { session ->
                 JSONObject()
@@ -165,6 +173,7 @@ class RotaskRepository(
             backup.tasks.forEach { db.taskDao().insert(it) }
             backup.workSessions.forEach { db.workSessionDao().insert(it) }
         }
+        cleanupExpiredEphemeralTasks(clock())
     }
 
     private fun parseBackup(rawJson: String): BackupData {
@@ -192,6 +201,11 @@ class RotaskRepository(
                 weight = obj.getDouble("weight").takeIf { it > 0.0 } ?: 1.0,
                 enabled = obj.optBoolean("enabled", true),
                 scheduledDays = Task.sanitizedScheduledDays(obj.optInt("scheduledDays", Task.ALL_DAYS_MASK)),
+                ephemeralDate = if (obj.has("ephemeralDate") && !obj.isNull("ephemeralDate")) {
+                    obj.getString("ephemeralDate")
+                } else {
+                    null
+                },
             )
         }
         val taskIds = tasks.map { it.id }.toSet()
@@ -207,6 +221,17 @@ class RotaskRepository(
         }
 
         return BackupData(groups = groups, tasks = tasks, workSessions = workSessions)
+    }
+
+    private suspend fun cleanupExpiredEphemeralTasks(today: LocalDate) {
+        val expiredTasks = db.taskDao().getEphemeralTasksOutside(today.toString())
+        if (expiredTasks.isEmpty()) return
+        db.withTransaction {
+            expiredTasks.forEach { task ->
+                db.workSessionDao().deleteForTask(task.id)
+                db.taskDao().delete(task)
+            }
+        }
     }
 
     private data class BackupData(

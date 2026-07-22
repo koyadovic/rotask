@@ -99,6 +99,12 @@ val MIGRATION_6_7: Migration = object : Migration(6, 7) {
     }
 }
 
+val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `tasks` ADD COLUMN `ephemeralDate` TEXT")
+    }
+}
+
 val MIGRATION_3_4: Migration = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

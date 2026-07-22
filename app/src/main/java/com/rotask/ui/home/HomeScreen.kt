@@ -268,7 +268,11 @@ fun GroupTasksScreen(
                     .sortedWith(
                         compareByDescending<TaskStatus> { it.scheduledToday }
                             .thenBy {
-                                if (!groupStatus.group.timed && it.scheduledToday && it.completedToday) 1 else 0
+                                if (
+                                    it.scheduledToday &&
+                                    it.completedToday &&
+                                    (!groupStatus.group.timed || it.task.isEphemeral)
+                                ) 1 else 0
                             }
                             .thenBy(String.CASE_INSENSITIVE_ORDER) { it.task.name }
                     )
@@ -288,7 +292,6 @@ fun GroupTasksScreen(
                     Spacer(Modifier.height(8.dp))
                     TaskRow(
                         status = taskStatus,
-                        timedGroup = groupStatus.group.timed,
                         onToggleEnabled = { vm.toggleEnabled(taskStatus.task) },
                         onStartTaskAlone = { vm.startTaskAlone(taskStatus.task) },
                         onMarkDone = { vm.markTaskDone(taskStatus.task) },
@@ -340,8 +343,9 @@ fun GroupTasksScreen(
             initialEnabled = true,
             initialScheduledDays = Task.ALL_DAYS_MASK,
             timedGroup = group.timed,
-            onSave = { name, description, weight, enabled, scheduledDays ->
-                vm.addTask(group.id, name, description, weight, enabled, scheduledDays)
+            allowEphemeral = true,
+            onSave = { name, description, weight, enabled, scheduledDays, ephemeral ->
+                vm.addTask(group.id, name, description, weight, enabled, scheduledDays, ephemeral)
             },
             onCancel = { vm.dismissDialogs() },
         )
@@ -357,7 +361,8 @@ fun GroupTasksScreen(
             initialEnabled = task.enabled,
             initialScheduledDays = task.scheduledDays,
             timedGroup = timedGroup,
-            onSave = { name, description, weight, enabled, scheduledDays ->
+            allowEphemeral = false,
+            onSave = { name, description, weight, enabled, scheduledDays, _ ->
                 vm.updateTask(task, name, description, weight, enabled, scheduledDays)
             },
             onCancel = { vm.dismissDialogs() },
@@ -423,13 +428,18 @@ private fun GroupHeader(
     }
     val scheduledTasks = status.scheduledTaskCountToday
     val completedTasks = status.completedTaskCountToday.coerceAtMost(scheduledTasks)
-    val remainingTasks = (scheduledTasks - completedTasks).coerceAtLeast(0)
-    val taskProgress = if (scheduledTasks > 0) {
-        (completedTasks.toFloat() / scheduledTasks).coerceIn(0f, 1f)
+    val ephemeralTasks = status.ephemeralTaskCountToday
+    val completedEphemeralTasks = status.completedEphemeralTaskCountToday.coerceAtMost(ephemeralTasks)
+    val remainingEphemeralTasks = (ephemeralTasks - completedEphemeralTasks).coerceAtLeast(0)
+    val checklistTasks = if (status.group.timed) ephemeralTasks else scheduledTasks
+    val checklistCompleted = if (status.group.timed) completedEphemeralTasks else completedTasks
+    val checklistRemaining = (checklistTasks - checklistCompleted).coerceAtLeast(0)
+    val checklistProgress = if (checklistTasks > 0) {
+        (checklistCompleted.toFloat() / checklistTasks).coerceIn(0f, 1f)
     } else {
         0f
     }
-    val taskProgressPercent = (taskProgress * 100f + 0.5f).toInt()
+    val checklistProgressPercent = (checklistProgress * 100f + 0.5f).toInt()
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(
@@ -502,9 +512,33 @@ private fun GroupHeader(
                     fontWeight = FontWeight.SemiBold,
                 )
             }
-        } else if (!status.group.timed && scheduledTasks > 0) {
+            if (ephemeralTasks > 0) {
+                Spacer(Modifier.height(4.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(
+                            R.string.group_ephemeral_progress_value,
+                            completedEphemeralTasks,
+                            ephemeralTasks,
+                        ),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.group_checklist_progress_remaining,
+                            remainingEphemeralTasks,
+                        ),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        } else if (checklistTasks > 0) {
             LinearProgressIndicator(
-                progress = { taskProgress },
+                progress = { checklistProgress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(7.dp),
@@ -515,18 +549,26 @@ private fun GroupHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = stringResource(
-                        R.string.group_checklist_progress_value,
-                        completedTasks,
-                        scheduledTasks,
-                        taskProgressPercent,
-                    ),
+                    text = if (status.group.timed) {
+                        stringResource(
+                            R.string.group_ephemeral_progress_value,
+                            checklistCompleted,
+                            checklistTasks,
+                        )
+                    } else {
+                        stringResource(
+                            R.string.group_checklist_progress_value,
+                            checklistCompleted,
+                            checklistTasks,
+                            checklistProgressPercent,
+                        )
+                    },
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.72f),
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = stringResource(R.string.group_checklist_progress_remaining, remainingTasks),
+                    text = stringResource(R.string.group_checklist_progress_remaining, checklistRemaining),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
@@ -548,7 +590,6 @@ private fun GroupHeader(
 @Composable
 private fun TaskRow(
     status: TaskStatus,
-    timedGroup: Boolean,
     onToggleEnabled: () -> Unit,
     onStartTaskAlone: () -> Unit,
     onMarkDone: () -> Unit,
@@ -556,10 +597,12 @@ private fun TaskRow(
     onDelete: () -> Unit,
 ) {
     val enabled = status.task.enabled
+    val ephemeral = status.task.isEphemeral
+    val timedTask = status.timed
     val scheduledToday = status.scheduledToday
     val appliesToday = enabled && scheduledToday
     val visuallyPending = appliesToday && !status.completedToday
-    val hasRemainingWork = appliesToday && if (timedGroup) {
+    val hasRemainingWork = appliesToday && if (timedTask) {
         status.remainingSecondsToday > 0
     } else {
         !status.completedToday
@@ -602,14 +645,18 @@ private fun TaskRow(
                         )
                     }
                     Text(
-                        text = scheduleSummary(status.task.scheduledDays),
+                        text = if (ephemeral) {
+                            stringResource(R.string.task_ephemeral_today)
+                        } else {
+                            scheduleSummary(status.task.scheduledDays)
+                        },
                         fontSize = 12.sp,
                         color = secondaryColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (timedGroup) {
+                if (timedTask) {
                     Text(
                         text = formatWeight(status.task.weight),
                         color = if (visuallyPending) MaterialTheme.colorScheme.primary else secondaryColor,
@@ -617,12 +664,14 @@ private fun TaskRow(
                     )
                     Spacer(Modifier.size(8.dp))
                 }
-                Switch(checked = enabled, onCheckedChange = { onToggleEnabled() })
+                if (!ephemeral) {
+                    Switch(checked = enabled, onCheckedChange = { onToggleEnabled() })
+                }
             }
 
             Spacer(Modifier.height(6.dp))
 
-            if (timedGroup && appliesToday) {
+            if (timedTask && appliesToday) {
                 val target = status.targetSecondsToday
                 val worked = status.workedSecondsToday
                 val progress = if (target > 0) (worked.toFloat() / target).coerceIn(0f, 1f) else 0f
@@ -643,8 +692,8 @@ private fun TaskRow(
                     text = when {
                         !enabled -> stringResource(R.string.task_paused)
                         !scheduledToday -> stringResource(R.string.task_not_scheduled_today)
-                        !timedGroup && status.completedToday -> stringResource(R.string.task_done_today)
-                        !timedGroup -> stringResource(R.string.task_pending_today)
+                        !timedTask && status.completedToday -> stringResource(R.string.task_done_today)
+                        !timedTask -> stringResource(R.string.task_pending_today)
                         else -> "${formatClock(status.workedSecondsToday)} / ${formatClock(status.targetSecondsToday)}"
                     },
                     fontSize = 12.sp,
@@ -652,7 +701,7 @@ private fun TaskRow(
                     color = if (visuallyPending) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
-                if (timedGroup) {
+                if (timedTask) {
                     IconButton(
                         onClick = onStartTaskAlone,
                         enabled = hasRemainingWork,
@@ -680,15 +729,17 @@ private fun TaskRow(
                     )
                 }
                 Spacer(Modifier.size(4.dp))
-                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        Icons.Filled.Edit,
-                        contentDescription = null,
-                        tint = secondaryColor,
-                        modifier = Modifier.size(18.dp),
-                    )
+                if (!ephemeral) {
+                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = null,
+                            tint = secondaryColor,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.size(4.dp))
                 }
-                Spacer(Modifier.size(4.dp))
                 IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                     Icon(
                         Icons.Filled.Delete,
@@ -882,7 +933,15 @@ private fun TaskEditDialog(
     initialEnabled: Boolean,
     initialScheduledDays: Int,
     timedGroup: Boolean,
-    onSave: (name: String, description: String, weight: Double, enabled: Boolean, scheduledDays: Int) -> Unit,
+    allowEphemeral: Boolean,
+    onSave: (
+        name: String,
+        description: String,
+        weight: Double,
+        enabled: Boolean,
+        scheduledDays: Int,
+        ephemeral: Boolean,
+    ) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
@@ -890,12 +949,13 @@ private fun TaskEditDialog(
     var weightText by remember { mutableStateOf(weightToText(initialWeight)) }
     var enabled by remember { mutableStateOf(initialEnabled) }
     var scheduledDays by remember { mutableStateOf(Task.sanitizedScheduledDays(initialScheduledDays)) }
+    var ephemeral by remember { mutableStateOf(false) }
 
     val parsedWeight = parseWeight(weightText)
     val hasScheduledDays = (scheduledDays and Task.ALL_DAYS_MASK) != 0
-    val canSave = name.isNotBlank() &&
-        (!timedGroup || (parsedWeight != null && parsedWeight > 0.0)) &&
-        hasScheduledDays
+    val regularConfigurationValid =
+        (!timedGroup || (parsedWeight != null && parsedWeight > 0.0)) && hasScheduledDays
+    val canSave = name.isNotBlank() && (ephemeral || regularConfigurationValid)
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -928,28 +988,42 @@ private fun TaskEditDialog(
                     ),
                 )
                 Spacer(Modifier.height(12.dp))
-                if (timedGroup) {
-                    OutlinedTextField(
-                        value = weightText,
-                        onValueChange = { v -> weightText = sanitizeWeightInput(v) },
-                        label = { Text(stringResource(R.string.task_weight)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    )
+                if (allowEphemeral) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.task_ephemeral),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(checked = ephemeral, onCheckedChange = { ephemeral = it })
+                    }
+                }
+                if (!ephemeral) {
+                    if (allowEphemeral) {
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    if (timedGroup) {
+                        OutlinedTextField(
+                            value = weightText,
+                            onValueChange = { v -> weightText = sanitizeWeightInput(v) },
+                            label = { Text(stringResource(R.string.task_weight)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.task_enabled),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(checked = enabled, onCheckedChange = { enabled = it })
+                    }
                     Spacer(Modifier.height(12.dp))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.task_enabled),
-                        modifier = Modifier.weight(1f),
+                    ScheduledDaysSelector(
+                        scheduledDays = scheduledDays,
+                        onChange = { scheduledDays = it },
                     )
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
                 }
-                Spacer(Modifier.height(12.dp))
-                ScheduledDaysSelector(
-                    scheduledDays = scheduledDays,
-                    onChange = { scheduledDays = it },
-                )
             }
         },
         confirmButton = {
@@ -960,8 +1034,9 @@ private fun TaskEditDialog(
                         name,
                         description,
                         if (timedGroup) parsedWeight ?: 1.0 else 1.0,
-                        enabled,
-                        scheduledDays,
+                        if (ephemeral) true else enabled,
+                        if (ephemeral) Task.ALL_DAYS_MASK else scheduledDays,
+                        ephemeral,
                     )
                 },
             ) {

@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.time.DayOfWeek
+import java.time.LocalDate
 
 @Entity(
     tableName = "tasks",
@@ -17,9 +18,18 @@ data class Task(
     val weight: Double,
     val enabled: Boolean = true,
     val scheduledDays: Int = ALL_DAYS_MASK,
+    val ephemeralDate: String? = null,
 ) {
+    val isEphemeral: Boolean get() = ephemeralDate != null
+
     fun isScheduledOn(dayOfWeek: DayOfWeek): Boolean =
         (scheduledDays and dayMask(dayOfWeek)) != 0
+
+    fun isAvailableOn(date: LocalDate): Boolean =
+        ephemeralDate == null || ephemeralDate == date.toString()
+
+    fun isScheduledOn(date: LocalDate): Boolean =
+        ephemeralDate?.let { it == date.toString() } ?: isScheduledOn(date.dayOfWeek)
 
     companion object {
         const val MONDAY_MASK = 1

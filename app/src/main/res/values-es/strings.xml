@@ -19,6 +19,7 @@
     <string name="group_progress_remaining">Quedan %1$s</string>
     <string name="group_checklist_progress_value">%1$d / %2$d tareas (%3$d%%)</string>
     <string name="group_checklist_progress_remaining">Quedan %1$d</string>
+    <string name="group_ephemeral_progress_value">Efímeras: %1$d / %2$d</string>
     <string name="group_no_work_today">Sin tareas programadas hoy</string>
     <string name="delete_group_confirm_empty">¿Eliminar %1$s?</string>
     <string name="delete_group_confirm_with_tasks">Al eliminar %1$s borrarás también sus %2$d tarea(s) y su historial.</string>
@@ -34,6 +35,8 @@
     <string name="task_paused">Pausada</string>
     <string name="task_done_today">Realizada hoy</string>
     <string name="task_pending_today">Pendiente hoy</string>
+    <string name="task_ephemeral">Solo hoy (efímera)</string>
+    <string name="task_ephemeral_today">Efímera, solo hoy</string>
     <string name="show_disabled_tasks">Mostrar desactivadas (%1$d)</string>
     <string name="hide_disabled_tasks">Ocultar desactivadas (%1$d)</string>
 

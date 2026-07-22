@@ -21,6 +21,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun get(id: Long): Task?
 
+    @Query("SELECT * FROM tasks WHERE ephemeralDate IS NOT NULL AND ephemeralDate != :date")
+    suspend fun getEphemeralTasksOutside(date: String): List<Task>
+
     @Insert
     suspend fun insert(task: Task): Long
 
