@@ -195,7 +195,13 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
     fun startTaskAlone(task: Task) {
         viewModelScope.launch {
             val status = repo.statusForTask(task.id) ?: return@launch
-            if (!status.timed || !status.task.enabled || status.remainingSecondsToday <= 0) return@launch
+            if (!status.task.enabled || !status.scheduledToday) return@launch
+            val hasWorkRemaining = if (status.timed) {
+                status.remainingSecondsToday > 0
+            } else {
+                !status.completedToday
+            }
+            if (!hasWorkRemaining) return@launch
             _navToWork.send(WorkStart(taskId = task.id, mode = WorkMode.SINGLE_TASK))
         }
     }

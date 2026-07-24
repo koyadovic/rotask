@@ -342,6 +342,7 @@ fun GroupTasksScreen(
             initialWeight = 1.0,
             initialEnabled = true,
             initialScheduledDays = Task.ALL_DAYS_MASK,
+            initialEphemeral = false,
             timedGroup = group.timed,
             allowEphemeral = true,
             onSave = { name, description, weight, enabled, scheduledDays, ephemeral ->
@@ -360,6 +361,7 @@ fun GroupTasksScreen(
             initialWeight = task.weight,
             initialEnabled = task.enabled,
             initialScheduledDays = task.scheduledDays,
+            initialEphemeral = task.isEphemeral,
             timedGroup = timedGroup,
             allowEphemeral = false,
             onSave = { name, description, weight, enabled, scheduledDays, _ ->
@@ -701,21 +703,19 @@ private fun TaskRow(
                     color = if (visuallyPending) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
-                if (timedTask) {
-                    IconButton(
-                        onClick = onStartTaskAlone,
-                        enabled = hasRemainingWork,
-                        modifier = Modifier.size(32.dp),
-                    ) {
-                        Icon(
-                            Icons.Filled.PlayArrow,
-                            contentDescription = stringResource(R.string.start_single_task),
-                            tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Spacer(Modifier.size(4.dp))
+                IconButton(
+                    onClick = onStartTaskAlone,
+                    enabled = hasRemainingWork,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(R.string.start_single_task),
+                        tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
+                Spacer(Modifier.size(4.dp))
                 IconButton(
                     onClick = onMarkDone,
                     enabled = hasRemainingWork,
@@ -729,17 +729,15 @@ private fun TaskRow(
                     )
                 }
                 Spacer(Modifier.size(4.dp))
-                if (!ephemeral) {
-                    IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                        Icon(
-                            Icons.Filled.Edit,
-                            contentDescription = null,
-                            tint = secondaryColor,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Spacer(Modifier.size(4.dp))
+                IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Filled.Edit,
+                        contentDescription = null,
+                        tint = secondaryColor,
+                        modifier = Modifier.size(18.dp),
+                    )
                 }
+                Spacer(Modifier.size(4.dp))
                 IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                     Icon(
                         Icons.Filled.Delete,
@@ -932,6 +930,7 @@ private fun TaskEditDialog(
     initialWeight: Double,
     initialEnabled: Boolean,
     initialScheduledDays: Int,
+    initialEphemeral: Boolean,
     timedGroup: Boolean,
     allowEphemeral: Boolean,
     onSave: (
@@ -949,7 +948,7 @@ private fun TaskEditDialog(
     var weightText by remember { mutableStateOf(weightToText(initialWeight)) }
     var enabled by remember { mutableStateOf(initialEnabled) }
     var scheduledDays by remember { mutableStateOf(Task.sanitizedScheduledDays(initialScheduledDays)) }
-    var ephemeral by remember { mutableStateOf(false) }
+    var ephemeral by remember { mutableStateOf(initialEphemeral) }
 
     val parsedWeight = parseWeight(weightText)
     val hasScheduledDays = (scheduledDays and Task.ALL_DAYS_MASK) != 0

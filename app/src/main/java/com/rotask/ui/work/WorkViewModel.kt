@@ -239,6 +239,10 @@ class WorkViewModel(
     private fun skipCurrentUntimed() {
         timerJob?.cancel()
         cancelCompletionAlarm()
+        if (mode == WorkMode.SINGLE_TASK) {
+            _state.update { it.copy(finished = true) }
+            return
+        }
         val skippedTaskId = currentTaskId
         val groupId = currentGroupId
         skippedUntimedTaskIds += skippedTaskId
