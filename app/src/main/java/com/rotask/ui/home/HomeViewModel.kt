@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 data class HomeUiState(
     val groups: List<GroupStatus> = emptyList(),
@@ -126,7 +127,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         weight: Double,
         enabled: Boolean,
         scheduledDays: Int,
-        ephemeral: Boolean,
+        ephemeralDate: LocalDate?,
     ) {
         viewModelScope.launch {
             repo.addTask(
@@ -136,7 +137,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                 weight = sanitizeWeight(weight),
                 enabled = enabled,
                 scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
-                ephemeral = ephemeral,
+                ephemeralDate = ephemeralDate,
             )
             dismissDialogs()
         }
@@ -149,6 +150,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         weight: Double,
         enabled: Boolean,
         scheduledDays: Int,
+        ephemeralDate: LocalDate?,
     ) {
         viewModelScope.launch {
             repo.updateTask(
@@ -156,8 +158,9 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                     name = name.trim(),
                     description = description.trim(),
                     weight = sanitizeWeight(weight),
-                    enabled = enabled,
+                    enabled = if (ephemeralDate != null) true else enabled,
                     scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
+                    ephemeralDate = ephemeralDate?.toString(),
                 )
             )
             dismissDialogs()

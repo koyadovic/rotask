@@ -83,7 +83,7 @@ class RotaskRepository(
         weight: Double,
         enabled: Boolean,
         scheduledDays: Int,
-        ephemeral: Boolean,
+        ephemeralDate: LocalDate?,
     ) {
         db.taskDao().insert(
             Task(
@@ -91,9 +91,9 @@ class RotaskRepository(
                 name = name,
                 description = description,
                 weight = weight,
-                enabled = if (ephemeral) true else enabled,
+                enabled = if (ephemeralDate != null) true else enabled,
                 scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
-                ephemeralDate = if (ephemeral) clock().toString() else null,
+                ephemeralDate = ephemeralDate?.toString(),
             )
         )
     }
@@ -224,7 +224,7 @@ class RotaskRepository(
     }
 
     private suspend fun cleanupExpiredEphemeralTasks(today: LocalDate) {
-        val expiredTasks = db.taskDao().getEphemeralTasksOutside(today.toString())
+        val expiredTasks = db.taskDao().getExpiredEphemeralTasks(today.toString())
         if (expiredTasks.isEmpty()) return
         db.withTransaction {
             expiredTasks.forEach { task ->

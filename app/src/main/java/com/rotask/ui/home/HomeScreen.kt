@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -34,6 +35,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,11 +46,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -74,6 +79,12 @@ import com.rotask.domain.GroupStatus
 import com.rotask.domain.TaskStatus
 import com.rotask.ui.format.formatClock
 import com.rotask.ui.format.formatWeight
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -342,11 +353,11 @@ fun GroupTasksScreen(
             initialWeight = 1.0,
             initialEnabled = true,
             initialScheduledDays = Task.ALL_DAYS_MASK,
-            initialEphemeral = false,
+            initialEphemeralDate = null,
             timedGroup = group.timed,
             allowEphemeral = true,
-            onSave = { name, description, weight, enabled, scheduledDays, ephemeral ->
-                vm.addTask(group.id, name, description, weight, enabled, scheduledDays, ephemeral)
+            onSave = { name, description, weight, enabled, scheduledDays, ephemeralDate ->
+                vm.addTask(group.id, name, description, weight, enabled, scheduledDays, ephemeralDate)
             },
             onCancel = { vm.dismissDialogs() },
         )
@@ -361,11 +372,19 @@ fun GroupTasksScreen(
             initialWeight = task.weight,
             initialEnabled = task.enabled,
             initialScheduledDays = task.scheduledDays,
-            initialEphemeral = task.isEphemeral,
+            initialEphemeralDate = task.ephemeralDate?.let(::parseDateOrNull),
             timedGroup = timedGroup,
             allowEphemeral = false,
-            onSave = { name, description, weight, enabled, scheduledDays, _ ->
-                vm.updateTask(task, name, description, weight, enabled, scheduledDays)
+            onSave = { name, description, weight, enabled, scheduledDays, ephemeralDate ->
+                vm.updateTask(
+                    task,
+                    name,
+                    description,
+                    weight,
+                    enabled,
+                    scheduledDays,
+                    ephemeralDate,
+                )
             },
             onCancel = { vm.dismissDialogs() },
         )
@@ -600,6 +619,7 @@ private fun TaskRow(
 ) {
     val enabled = status.task.enabled
     val ephemeral = status.task.isEphemeral
+    val ephemeralDate = status.task.ephemeralDate?.let(::parseDateOrNull)
     val timedTask = status.timed
     val scheduledToday = status.scheduledToday
     val appliesToday = enabled && scheduledToday
@@ -651,10 +671,14 @@ private fun TaskRow(
                         )
                     }
                     Text(
-                        text = if (ephemeral) {
-                            stringResource(R.string.task_ephemeral_today)
-                        } else {
-                            scheduleSummary(status.task.scheduledDays)
+                        text = when {
+                            !ephemeral -> scheduleSummary(status.task.scheduledDays)
+                            scheduledToday -> stringResource(R.string.task_ephemeral_today)
+                            ephemeralDate != null -> stringResource(
+                                R.string.task_ephemeral_date_value,
+                                formatDate(ephemeralDate),
+                            )
+                            else -> stringResource(R.string.task_ephemeral)
                         },
                         fontSize = 12.sp,
                         color = secondaryColor,
@@ -697,6 +721,10 @@ private fun TaskRow(
                 Text(
                     text = when {
                         !enabled -> stringResource(R.string.task_paused)
+                        ephemeral && !scheduledToday && ephemeralDate != null -> stringResource(
+                            R.string.task_scheduled_for_date,
+                            formatDate(ephemeralDate),
+                        )
                         !scheduledToday -> stringResource(R.string.task_not_scheduled_today)
                         !timedTask && status.completedToday -> stringResource(R.string.task_done_today)
                         !timedTask -> stringResource(R.string.task_pending_today)
@@ -913,6 +941,7 @@ private fun GroupEditDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TaskEditDialog(
     title: String,
@@ -921,7 +950,7 @@ private fun TaskEditDialog(
     initialWeight: Double,
     initialEnabled: Boolean,
     initialScheduledDays: Int,
-    initialEphemeral: Boolean,
+    initialEphemeralDate: LocalDate?,
     timedGroup: Boolean,
     allowEphemeral: Boolean,
     onSave: (
@@ -930,22 +959,27 @@ private fun TaskEditDialog(
         weight: Double,
         enabled: Boolean,
         scheduledDays: Int,
-        ephemeral: Boolean,
+        ephemeralDate: LocalDate?,
     ) -> Unit,
     onCancel: () -> Unit,
 ) {
+    val today = remember { LocalDate.now() }
     var name by remember { mutableStateOf(initialName) }
     var description by remember { mutableStateOf(initialDescription) }
     var weightText by remember { mutableStateOf(weightToText(initialWeight)) }
     var enabled by remember { mutableStateOf(initialEnabled) }
     var scheduledDays by remember { mutableStateOf(Task.sanitizedScheduledDays(initialScheduledDays)) }
-    var ephemeral by remember { mutableStateOf(initialEphemeral) }
+    var ephemeral by remember { mutableStateOf(initialEphemeralDate != null) }
+    var ephemeralDate by remember { mutableStateOf(initialEphemeralDate ?: today) }
+    var showEphemeralDatePicker by remember { mutableStateOf(false) }
 
     val parsedWeight = parseWeight(weightText)
     val hasScheduledDays = (scheduledDays and Task.ALL_DAYS_MASK) != 0
     val regularConfigurationValid =
         (!timedGroup || (parsedWeight != null && parsedWeight > 0.0)) && hasScheduledDays
-    val canSave = name.isNotBlank() && (ephemeral || regularConfigurationValid)
+    val ephemeralConfigurationValid = !ephemeralDate.isBefore(today)
+    val canSave = name.isNotBlank() &&
+        if (ephemeral) ephemeralConfigurationValid else regularConfigurationValid
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -987,6 +1021,29 @@ private fun TaskEditDialog(
                         Switch(checked = ephemeral, onCheckedChange = { ephemeral = it })
                     }
                 }
+                if (ephemeral) {
+                    if (allowEphemeral) {
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    Text(
+                        text = stringResource(R.string.task_ephemeral_date),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = { showEphemeralDatePicker = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DateRange,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.size(8.dp))
+                        Text(formatDate(ephemeralDate))
+                    }
+                }
                 if (!ephemeral) {
                     if (allowEphemeral) {
                         Spacer(Modifier.height(12.dp))
@@ -1026,7 +1083,7 @@ private fun TaskEditDialog(
                         if (timedGroup) parsedWeight ?: 1.0 else 1.0,
                         if (ephemeral) true else enabled,
                         if (ephemeral) Task.ALL_DAYS_MASK else scheduledDays,
-                        ephemeral,
+                        ephemeralDate.takeIf { ephemeral },
                     )
                 },
             ) {
@@ -1039,6 +1096,41 @@ private fun TaskEditDialog(
             }
         },
     )
+
+    if (showEphemeralDatePicker) {
+        val firstSelectableDateMillis = today.toUtcMillis()
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = ephemeralDate.toUtcMillis(),
+            selectableDates = remember(firstSelectableDateMillis) {
+                object : SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                        utcTimeMillis >= firstSelectableDateMillis
+                }
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEphemeralDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            ephemeralDate = it.toLocalDateUtc()
+                        }
+                        showEphemeralDatePicker = false
+                    },
+                ) {
+                    Text(stringResource(R.string.done))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEphemeralDatePicker = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }
 
 @Composable
@@ -1164,3 +1256,19 @@ private fun parseWeight(text: String): Double? = text.replace(',', '.').toDouble
 private fun weightToText(value: Double): String =
     if (value == value.toLong().toDouble()) value.toLong().toString()
     else "%.2f".format(value).trimEnd('0').trimEnd('.')
+
+private fun parseDateOrNull(value: String): LocalDate? =
+    runCatching { LocalDate.parse(value) }.getOrNull()
+
+private fun formatDate(date: LocalDate): String =
+    date.format(
+        DateTimeFormatter
+            .ofLocalizedDate(FormatStyle.MEDIUM)
+            .withLocale(Locale.getDefault())
+    )
+
+private fun LocalDate.toUtcMillis(): Long =
+    atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+private fun Long.toLocalDateUtc(): LocalDate =
+    Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()

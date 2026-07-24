@@ -25,9 +25,6 @@ data class Task(
     fun isScheduledOn(dayOfWeek: DayOfWeek): Boolean =
         (scheduledDays and dayMask(dayOfWeek)) != 0
 
-    fun isAvailableOn(date: LocalDate): Boolean =
-        ephemeralDate == null || ephemeralDate == date.toString()
-
     fun isScheduledOn(date: LocalDate): Boolean =
         ephemeralDate?.let { it == date.toString() } ?: isScheduledOn(date.dayOfWeek)
 

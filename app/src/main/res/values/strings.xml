@@ -35,8 +35,11 @@
     <string name="task_paused">Paused</string>
     <string name="task_done_today">Done today</string>
     <string name="task_pending_today">Pending today</string>
-    <string name="task_ephemeral">Today only (ephemeral)</string>
-    <string name="task_ephemeral_today">Ephemeral, today only</string>
+    <string name="task_ephemeral">One-day task (ephemeral)</string>
+    <string name="task_ephemeral_today">Ephemeral, today</string>
+    <string name="task_ephemeral_date">Date</string>
+    <string name="task_ephemeral_date_value">Ephemeral: %1$s</string>
+    <string name="task_scheduled_for_date">Scheduled for %1$s</string>
     <string name="show_disabled_tasks">Show disabled (%1$d)</string>
     <string name="hide_disabled_tasks">Hide disabled (%1$d)</string>
 

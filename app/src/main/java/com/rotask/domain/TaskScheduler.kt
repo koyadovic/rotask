@@ -51,7 +51,7 @@ class TaskScheduler(private val db: AppDatabase) {
     suspend fun computeGroupStatuses(today: LocalDate): List<GroupStatus> {
         val groups = db.groupDao().getAll()
         return groups.map { group ->
-            val tasks = db.taskDao().getAllInGroup(group.id).filter { it.isAvailableOn(today) }
+            val tasks = db.taskDao().getAllInGroup(group.id)
             val enabledTasks = tasks.filter {
                 it.enabled && !it.isEphemeral && it.isScheduledOn(today)
             }
