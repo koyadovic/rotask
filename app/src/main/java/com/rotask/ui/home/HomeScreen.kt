@@ -623,6 +623,10 @@ private fun TaskRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(
+                enabled = hasRemainingWork,
+                onClick = onStartTaskAlone,
+            )
             .alpha(rowAlpha),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
@@ -703,19 +707,6 @@ private fun TaskRow(
                     color = if (visuallyPending) MaterialTheme.colorScheme.onSurface else secondaryColor,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(
-                    onClick = onStartTaskAlone,
-                    enabled = hasRemainingWork,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = stringResource(R.string.start_single_task),
-                        tint = if (hasRemainingWork) MaterialTheme.colorScheme.primary else secondaryColor,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-                Spacer(Modifier.size(4.dp))
                 IconButton(
                     onClick = onMarkDone,
                     enabled = hasRemainingWork,
