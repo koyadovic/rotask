@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.rotask.data.Group
+import com.rotask.data.GroupTimingMode
 import com.rotask.data.Task
 import com.rotask.domain.GroupStatus
 import com.rotask.domain.RotaskRepository
@@ -91,21 +92,25 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
 
     // ---- Group actions ----
 
-    fun addGroup(name: String, dailyMinutes: Int, timed: Boolean) {
+    fun addGroup(name: String, dailyMinutes: Int, timingMode: GroupTimingMode) {
         viewModelScope.launch {
-            repo.addGroup(name, dailyMinutes, timed)
+            repo.addGroup(name, dailyMinutes, timingMode)
             dismissDialogs()
         }
     }
 
-    fun updateGroup(original: Group, name: String, dailyMinutes: Int, timed: Boolean) {
+    fun updateGroup(
+        original: Group,
+        name: String,
+        dailyMinutes: Int,
+        timingMode: GroupTimingMode,
+    ) {
         viewModelScope.launch {
             repo.updateGroup(
-                original.copy(
-                    name = name.trim(),
-                    dailyMinutes = dailyMinutes.coerceAtLeast(1),
-                    timed = timed,
-                )
+                group = original,
+                name = name,
+                dailyMinutes = dailyMinutes,
+                timingMode = timingMode,
             )
             dismissDialogs()
         }
@@ -125,6 +130,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         name: String,
         description: String,
         weight: Double,
+        durationMinutes: Int,
         enabled: Boolean,
         scheduledDays: Int,
         ephemeralDate: LocalDate?,
@@ -135,6 +141,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                 name = name.trim(),
                 description = description.trim(),
                 weight = sanitizeWeight(weight),
+                durationMinutes = durationMinutes.coerceAtLeast(1),
                 enabled = enabled,
                 scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
                 ephemeralDate = ephemeralDate,
@@ -148,6 +155,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
         name: String,
         description: String,
         weight: Double,
+        durationMinutes: Int,
         enabled: Boolean,
         scheduledDays: Int,
         ephemeralDate: LocalDate?,
@@ -158,6 +166,7 @@ class HomeViewModel(private val repo: RotaskRepository) : ViewModel() {
                     name = name.trim(),
                     description = description.trim(),
                     weight = sanitizeWeight(weight),
+                    durationMinutes = durationMinutes.coerceAtLeast(1),
                     enabled = if (ephemeralDate != null) true else enabled,
                     scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
                     ephemeralDate = ephemeralDate?.toString(),

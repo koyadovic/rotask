@@ -3,10 +3,14 @@
     <string name="app_name">Rotask</string>
 
     <string name="home_title">Rotask</string>
-    <string name="daily_minutes_value">%1$d min/día</string>
     <string name="minutes_per_day">Minutos por día</string>
-    <string name="group_timed">Usar temporizador</string>
     <string name="group_without_time">Sin tiempo</string>
+    <string name="group_timing_mode">Temporización</string>
+    <string name="group_mode_weighted">Pesos</string>
+    <string name="group_mode_per_task">Por tarea</string>
+    <string name="group_mode_untimed">Sin tiempo</string>
+    <string name="group_weighted_time_value">%1$d min/día · pesos</string>
+    <string name="group_task_time_value">%1$d min en tareas</string>
 
     <string name="empty_groups">Aún no hay grupos. Crea uno para empezar.</string>
     <string name="group_empty">Aún no hay tareas en este grupo.</string>
@@ -31,6 +35,8 @@
     <string name="task_name">Nombre</string>
     <string name="task_description">Descripción (qué entrenar)</string>
     <string name="task_weight">Peso</string>
+    <string name="task_duration_minutes">Minutos</string>
+    <string name="task_minutes_value">%1$d min</string>
     <string name="task_enabled">Activa en la rotación</string>
     <string name="task_paused">Pausada</string>
     <string name="task_done_today">Realizada hoy</string>

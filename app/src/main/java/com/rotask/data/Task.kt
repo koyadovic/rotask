@@ -19,6 +19,7 @@ data class Task(
     val enabled: Boolean = true,
     val scheduledDays: Int = ALL_DAYS_MASK,
     val ephemeralDate: String? = null,
+    val durationMinutes: Int = 1,
 ) {
     val isEphemeral: Boolean get() = ephemeralDate != null
 

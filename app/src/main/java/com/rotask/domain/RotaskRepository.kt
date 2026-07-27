@@ -3,6 +3,7 @@ package com.rotask.domain
 import androidx.room.withTransaction
 import com.rotask.data.AppDatabase
 import com.rotask.data.Group
+import com.rotask.data.GroupTimingMode
 import com.rotask.data.Task
 import com.rotask.data.WorkSession
 import org.json.JSONArray
@@ -48,23 +49,64 @@ class RotaskRepository(
     suspend fun pickNextInGroupExcluding(groupId: Long, excludeTaskIds: Set<Long>): TaskStatus? =
         scheduler.pickNextInGroup(groupId, clock(), excludeTaskIds)
 
-    suspend fun addGroup(name: String, dailyMinutes: Int, timed: Boolean) {
+    suspend fun addGroup(
+        name: String,
+        dailyMinutes: Int,
+        timingMode: GroupTimingMode,
+    ) {
         db.groupDao().insert(
             Group(
                 name = name.trim(),
                 dailyMinutes = dailyMinutes.coerceAtLeast(1),
-                timed = timed,
-            )
+            ).withTimingMode(timingMode)
         )
     }
 
-    suspend fun updateGroup(group: Group) {
-        db.groupDao().update(
-            group.copy(
-                name = group.name.trim(),
-                dailyMinutes = group.dailyMinutes.coerceAtLeast(1),
+    suspend fun updateGroup(
+        group: Group,
+        name: String,
+        dailyMinutes: Int,
+        timingMode: GroupTimingMode,
+    ) {
+        db.withTransaction {
+            val tasks = db.taskDao().getAllInGroup(group.id)
+            val regularTasks = tasks.filterNot { it.isEphemeral }
+            val sourceUsesTaskDurations = group.taskDurationMode
+            var convertedDailyMinutes = dailyMinutes.coerceAtLeast(1)
+
+            if (timingMode == GroupTimingMode.PER_TASK && !sourceUsesTaskDurations) {
+                val durations = allocateDurationMinutes(
+                    tasks = regularTasks,
+                    totalMinutes = convertedDailyMinutes,
+                )
+                regularTasks.forEach { task ->
+                    db.taskDao().update(
+                        task.copy(durationMinutes = durations.getValue(task.id))
+                    )
+                }
+                convertedDailyMinutes = durations.values.sum().coerceAtLeast(1)
+            } else if (timingMode == GroupTimingMode.WEIGHTED && sourceUsesTaskDurations) {
+                regularTasks.forEach { task ->
+                    db.taskDao().update(
+                        task.copy(weight = task.durationMinutes.coerceAtLeast(1).toDouble())
+                    )
+                }
+                convertedDailyMinutes = regularTasks
+                    .sumOf { it.durationMinutes.coerceAtLeast(1) }
+                    .coerceAtLeast(1)
+            } else if (timingMode == GroupTimingMode.PER_TASK) {
+                convertedDailyMinutes = regularTasks
+                    .sumOf { it.durationMinutes.coerceAtLeast(1) }
+                    .coerceAtLeast(1)
+            }
+
+            db.groupDao().update(
+                group.copy(
+                    name = name.trim(),
+                    dailyMinutes = convertedDailyMinutes,
+                ).withTimingMode(timingMode)
             )
-        )
+        }
     }
 
     suspend fun deleteGroup(group: Group) {
@@ -81,6 +123,7 @@ class RotaskRepository(
         name: String,
         description: String,
         weight: Double,
+        durationMinutes: Int,
         enabled: Boolean,
         scheduledDays: Int,
         ephemeralDate: LocalDate?,
@@ -91,15 +134,24 @@ class RotaskRepository(
                 name = name,
                 description = description,
                 weight = weight,
+                durationMinutes = durationMinutes.coerceAtLeast(1),
                 enabled = if (ephemeralDate != null) true else enabled,
                 scheduledDays = Task.sanitizedScheduledDays(scheduledDays),
                 ephemeralDate = ephemeralDate?.toString(),
             )
-        )
+        ).also {
+            syncTaskDurationGroupTotal(groupId)
+        }
     }
 
     suspend fun updateTask(task: Task) {
-        db.taskDao().update(task.copy(scheduledDays = Task.sanitizedScheduledDays(task.scheduledDays)))
+        db.taskDao().update(
+            task.copy(
+                scheduledDays = Task.sanitizedScheduledDays(task.scheduledDays),
+                durationMinutes = task.durationMinutes.coerceAtLeast(1),
+            )
+        )
+        syncTaskDurationGroupTotal(task.groupId)
     }
 
     suspend fun setEnabled(task: Task, enabled: Boolean) {
@@ -109,6 +161,7 @@ class RotaskRepository(
     suspend fun deleteTask(task: Task) {
         db.workSessionDao().deleteForTask(task.id)
         db.taskDao().delete(task)
+        syncTaskDurationGroupTotal(task.groupId)
     }
 
     suspend fun recordWork(taskId: Long, seconds: Long) {
@@ -141,6 +194,7 @@ class RotaskRepository(
                     .put("name", group.name)
                     .put("dailyMinutes", group.dailyMinutes)
                     .put("timed", group.timed)
+                    .put("taskDurationMode", group.taskDurationMode)
             })
             .put("tasks", tasks.toJsonArray { task ->
                 JSONObject()
@@ -149,6 +203,7 @@ class RotaskRepository(
                     .put("name", task.name)
                     .put("description", task.description)
                     .put("weight", task.weight)
+                    .put("durationMinutes", task.durationMinutes)
                     .put("enabled", task.enabled)
                     .put("scheduledDays", Task.sanitizedScheduledDays(task.scheduledDays))
                     .put("ephemeralDate", task.ephemeralDate ?: JSONObject.NULL)
@@ -179,7 +234,7 @@ class RotaskRepository(
     private fun parseBackup(rawJson: String): BackupData {
         val root = JSONObject(rawJson)
         val version = root.getInt("version")
-        require(version == BACKUP_VERSION) { "Unsupported backup version: $version" }
+        require(version in 1..BACKUP_VERSION) { "Unsupported backup version: $version" }
 
         val groups = root.getJSONArray("groups").mapObjects { obj ->
             Group(
@@ -187,6 +242,7 @@ class RotaskRepository(
                 name = obj.getString("name"),
                 dailyMinutes = obj.getInt("dailyMinutes").coerceAtLeast(1),
                 timed = obj.optBoolean("timed", true),
+                taskDurationMode = obj.optBoolean("taskDurationMode", false),
             )
         }
         val groupIds = groups.map { it.id }.toSet()
@@ -199,6 +255,7 @@ class RotaskRepository(
                 name = obj.getString("name"),
                 description = obj.optString("description", ""),
                 weight = obj.getDouble("weight").takeIf { it > 0.0 } ?: 1.0,
+                durationMinutes = obj.optInt("durationMinutes", 1).coerceAtLeast(1),
                 enabled = obj.optBoolean("enabled", true),
                 scheduledDays = Task.sanitizedScheduledDays(obj.optInt("scheduledDays", Task.ALL_DAYS_MASK)),
                 ephemeralDate = if (obj.has("ephemeralDate") && !obj.isNull("ephemeralDate")) {
@@ -234,6 +291,55 @@ class RotaskRepository(
         }
     }
 
+    private suspend fun syncTaskDurationGroupTotal(groupId: Long) {
+        val group = db.groupDao().get(groupId) ?: return
+        if (!group.taskDurationMode) return
+        val totalMinutes = db.taskDao().getAllInGroup(groupId)
+            .filterNot { it.isEphemeral }
+            .sumOf { it.durationMinutes.coerceAtLeast(1) }
+            .coerceAtLeast(1)
+        if (group.dailyMinutes != totalMinutes) {
+            db.groupDao().update(group.copy(dailyMinutes = totalMinutes))
+        }
+    }
+
+    private fun allocateDurationMinutes(
+        tasks: List<Task>,
+        totalMinutes: Int,
+    ): Map<Long, Int> {
+        if (tasks.isEmpty()) return emptyMap()
+        val targetMinutes = totalMinutes.coerceAtLeast(tasks.size)
+        val remainingMinutes = targetMinutes - tasks.size
+        val sumWeights = tasks.sumOf { it.weight.coerceAtLeast(MIN_WEIGHT) }
+        val allocations = tasks.map { task ->
+            val rawExtra = remainingMinutes * task.weight.coerceAtLeast(MIN_WEIGHT) / sumWeights
+            DurationAllocation(
+                taskId = task.id,
+                minutes = 1 + rawExtra.toInt(),
+                remainder = rawExtra - rawExtra.toInt(),
+            )
+        }.toMutableList()
+        var undistributed = targetMinutes - allocations.sumOf { it.minutes }
+        allocations
+            .sortedWith(
+                compareByDescending<DurationAllocation> { it.remainder }
+                    .thenBy { it.taskId }
+            )
+            .forEach { allocation ->
+                if (undistributed <= 0) return@forEach
+                val index = allocations.indexOfFirst { it.taskId == allocation.taskId }
+                allocations[index] = allocations[index].copy(minutes = allocation.minutes + 1)
+                undistributed--
+            }
+        return allocations.associate { it.taskId to it.minutes }
+    }
+
+    private data class DurationAllocation(
+        val taskId: Long,
+        val minutes: Int,
+        val remainder: Double,
+    )
+
     private data class BackupData(
         val groups: List<Group>,
         val tasks: List<Task>,
@@ -251,6 +357,7 @@ class RotaskRepository(
     private fun JSONArray?.orEmpty(): JSONArray = this ?: JSONArray()
 
     companion object {
-        private const val BACKUP_VERSION = 1
+        private const val BACKUP_VERSION = 2
+        private const val MIN_WEIGHT = 0.000001
     }
 }

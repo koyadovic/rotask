@@ -47,6 +47,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -74,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rotask.R
 import com.rotask.data.Group
+import com.rotask.data.GroupTimingMode
 import com.rotask.data.Task
 import com.rotask.domain.GroupStatus
 import com.rotask.domain.TaskStatus
@@ -171,8 +175,8 @@ fun HomeScreen(
             title = stringResource(R.string.add_group),
             initialName = "",
             initialDailyMinutes = 60,
-            initialTimed = true,
-            onSave = { name, minutes, timed -> vm.addGroup(name, minutes, timed) },
+            initialTimingMode = GroupTimingMode.WEIGHTED,
+            onSave = { name, minutes, timingMode -> vm.addGroup(name, minutes, timingMode) },
             onCancel = { vm.dismissDialogs() },
         )
     }
@@ -182,8 +186,10 @@ fun HomeScreen(
             title = stringResource(R.string.edit_group),
             initialName = group.name,
             initialDailyMinutes = group.dailyMinutes,
-            initialTimed = group.timed,
-            onSave = { name, minutes, timed -> vm.updateGroup(group, name, minutes, timed) },
+            initialTimingMode = group.timingMode,
+            onSave = { name, minutes, timingMode ->
+                vm.updateGroup(group, name, minutes, timingMode)
+            },
             onCancel = { vm.dismissDialogs() },
         )
     }
@@ -303,6 +309,7 @@ fun GroupTasksScreen(
                     Spacer(Modifier.height(8.dp))
                     TaskRow(
                         status = taskStatus,
+                        taskDurationMode = groupStatus.group.taskDurationMode,
                         onToggleEnabled = { vm.toggleEnabled(taskStatus.task) },
                         onStartTaskAlone = { vm.startTaskAlone(taskStatus.task) },
                         onMarkDone = { vm.markTaskDone(taskStatus.task) },
@@ -351,36 +358,52 @@ fun GroupTasksScreen(
             initialName = "",
             initialDescription = "",
             initialWeight = 1.0,
+            initialDurationMinutes = 10,
             initialEnabled = true,
             initialScheduledDays = Task.ALL_DAYS_MASK,
             initialEphemeralDate = null,
-            timedGroup = group.timed,
+            timingMode = group.timingMode,
             allowEphemeral = true,
-            onSave = { name, description, weight, enabled, scheduledDays, ephemeralDate ->
-                vm.addTask(group.id, name, description, weight, enabled, scheduledDays, ephemeralDate)
+            onSave = { name, description, weight, durationMinutes, enabled, scheduledDays, ephemeralDate ->
+                vm.addTask(
+                    group.id,
+                    name,
+                    description,
+                    weight,
+                    durationMinutes,
+                    enabled,
+                    scheduledDays,
+                    ephemeralDate,
+                )
             },
             onCancel = { vm.dismissDialogs() },
         )
     }
 
     state.editingTask?.let { task ->
-        val timedGroup = state.groups.firstOrNull { it.group.id == task.groupId }?.group?.timed ?: true
+        val timingMode = state.groups
+            .firstOrNull { it.group.id == task.groupId }
+            ?.group
+            ?.timingMode
+            ?: GroupTimingMode.WEIGHTED
         TaskEditDialog(
             title = stringResource(R.string.edit_task),
             initialName = task.name,
             initialDescription = task.description,
             initialWeight = task.weight,
+            initialDurationMinutes = task.durationMinutes,
             initialEnabled = task.enabled,
             initialScheduledDays = task.scheduledDays,
             initialEphemeralDate = task.ephemeralDate?.let(::parseDateOrNull),
-            timedGroup = timedGroup,
+            timingMode = timingMode,
             allowEphemeral = false,
-            onSave = { name, description, weight, enabled, scheduledDays, ephemeralDate ->
+            onSave = { name, description, weight, durationMinutes, enabled, scheduledDays, ephemeralDate ->
                 vm.updateTask(
                     task,
                     name,
                     description,
                     weight,
+                    durationMinutes,
                     enabled,
                     scheduledDays,
                     ephemeralDate,
@@ -461,6 +484,9 @@ private fun GroupHeader(
         0f
     }
     val checklistProgressPercent = (checklistProgress * 100f + 0.5f).toInt()
+    val configuredTaskMinutes = status.statuses
+        .filterNot { it.task.isEphemeral }
+        .sumOf { it.task.durationMinutes.coerceAtLeast(1) }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(
@@ -475,10 +501,16 @@ private fun GroupHeader(
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = if (status.group.timed) {
-                    stringResource(R.string.daily_minutes_value, status.group.dailyMinutes)
-                } else {
-                    stringResource(R.string.group_without_time)
+                text = when (status.group.timingMode) {
+                    GroupTimingMode.WEIGHTED -> stringResource(
+                        R.string.group_weighted_time_value,
+                        status.group.dailyMinutes,
+                    )
+                    GroupTimingMode.PER_TASK -> stringResource(
+                        R.string.group_task_time_value,
+                        configuredTaskMinutes,
+                    )
+                    GroupTimingMode.UNTIMED -> stringResource(R.string.group_without_time)
                 },
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.primary,
@@ -611,6 +643,7 @@ private fun GroupHeader(
 @Composable
 private fun TaskRow(
     status: TaskStatus,
+    taskDurationMode: Boolean,
     onToggleEnabled: () -> Unit,
     onStartTaskAlone: () -> Unit,
     onMarkDone: () -> Unit,
@@ -688,7 +721,14 @@ private fun TaskRow(
                 }
                 if (timedTask) {
                     Text(
-                        text = formatWeight(status.task.weight),
+                        text = if (taskDurationMode) {
+                            stringResource(
+                                R.string.task_minutes_value,
+                                status.task.durationMinutes,
+                            )
+                        } else {
+                            formatWeight(status.task.weight)
+                        },
                         color = if (visuallyPending) MaterialTheme.colorScheme.primary else secondaryColor,
                         fontWeight = FontWeight.Bold,
                     )
@@ -875,21 +915,28 @@ private fun AddGroupButton(onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GroupEditDialog(
     title: String,
     initialName: String,
     initialDailyMinutes: Int,
-    initialTimed: Boolean,
-    onSave: (name: String, dailyMinutes: Int, timed: Boolean) -> Unit,
+    initialTimingMode: GroupTimingMode,
+    onSave: (name: String, dailyMinutes: Int, timingMode: GroupTimingMode) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
     var minutesText by remember { mutableStateOf(initialDailyMinutes.toString()) }
-    var timed by remember { mutableStateOf(initialTimed) }
+    var timingMode by remember { mutableStateOf(initialTimingMode) }
 
     val parsedMinutes = minutesText.toIntOrNull()
-    val canSave = name.isNotBlank() && (!timed || (parsedMinutes != null && parsedMinutes > 0))
+    val canSave = name.isNotBlank() &&
+        (timingMode != GroupTimingMode.WEIGHTED || (parsedMinutes != null && parsedMinutes > 0))
+    val timingModes = listOf(
+        GroupTimingMode.WEIGHTED,
+        GroupTimingMode.PER_TASK,
+        GroupTimingMode.UNTIMED,
+    )
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -906,14 +953,39 @@ private fun GroupEditDialog(
                     ),
                 )
                 Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.group_timed),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(checked = timed, onCheckedChange = { timed = it })
+                Text(
+                    text = stringResource(R.string.group_timing_mode),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(8.dp))
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    timingModes.forEachIndexed { index, mode ->
+                        SegmentedButton(
+                            selected = timingMode == mode,
+                            onClick = { timingMode = mode },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = timingModes.size,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                text = when (mode) {
+                                    GroupTimingMode.WEIGHTED ->
+                                        stringResource(R.string.group_mode_weighted)
+                                    GroupTimingMode.PER_TASK ->
+                                        stringResource(R.string.group_mode_per_task)
+                                    GroupTimingMode.UNTIMED ->
+                                        stringResource(R.string.group_mode_untimed)
+                                },
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
-                if (timed) {
+                if (timingMode == GroupTimingMode.WEIGHTED) {
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
                         value = minutesText,
@@ -928,7 +1000,13 @@ private fun GroupEditDialog(
         confirmButton = {
             TextButton(
                 enabled = canSave,
-                onClick = { onSave(name, parsedMinutes ?: initialDailyMinutes.coerceAtLeast(1), timed) },
+                onClick = {
+                    onSave(
+                        name,
+                        parsedMinutes ?: initialDailyMinutes.coerceAtLeast(1),
+                        timingMode,
+                    )
+                },
             ) {
                 Text(stringResource(R.string.save))
             }
@@ -948,15 +1026,17 @@ private fun TaskEditDialog(
     initialName: String,
     initialDescription: String,
     initialWeight: Double,
+    initialDurationMinutes: Int,
     initialEnabled: Boolean,
     initialScheduledDays: Int,
     initialEphemeralDate: LocalDate?,
-    timedGroup: Boolean,
+    timingMode: GroupTimingMode,
     allowEphemeral: Boolean,
     onSave: (
         name: String,
         description: String,
         weight: Double,
+        durationMinutes: Int,
         enabled: Boolean,
         scheduledDays: Int,
         ephemeralDate: LocalDate?,
@@ -967,6 +1047,7 @@ private fun TaskEditDialog(
     var name by remember { mutableStateOf(initialName) }
     var description by remember { mutableStateOf(initialDescription) }
     var weightText by remember { mutableStateOf(weightToText(initialWeight)) }
+    var durationMinutesText by remember { mutableStateOf(initialDurationMinutes.toString()) }
     var enabled by remember { mutableStateOf(initialEnabled) }
     var scheduledDays by remember { mutableStateOf(Task.sanitizedScheduledDays(initialScheduledDays)) }
     var ephemeral by remember { mutableStateOf(initialEphemeralDate != null) }
@@ -974,9 +1055,15 @@ private fun TaskEditDialog(
     var showEphemeralDatePicker by remember { mutableStateOf(false) }
 
     val parsedWeight = parseWeight(weightText)
+    val parsedDurationMinutes = durationMinutesText.toIntOrNull()
     val hasScheduledDays = (scheduledDays and Task.ALL_DAYS_MASK) != 0
-    val regularConfigurationValid =
-        (!timedGroup || (parsedWeight != null && parsedWeight > 0.0)) && hasScheduledDays
+    val timingConfigurationValid = when (timingMode) {
+        GroupTimingMode.WEIGHTED -> parsedWeight != null && parsedWeight > 0.0
+        GroupTimingMode.PER_TASK ->
+            parsedDurationMinutes != null && parsedDurationMinutes > 0
+        GroupTimingMode.UNTIMED -> true
+    }
+    val regularConfigurationValid = timingConfigurationValid && hasScheduledDays
     val ephemeralConfigurationValid = !ephemeralDate.isBefore(today)
     val canSave = name.isNotBlank() &&
         if (ephemeral) ephemeralConfigurationValid else regularConfigurationValid
@@ -1048,14 +1135,30 @@ private fun TaskEditDialog(
                     if (allowEphemeral) {
                         Spacer(Modifier.height(12.dp))
                     }
-                    if (timedGroup) {
-                        OutlinedTextField(
-                            value = weightText,
-                            onValueChange = { v -> weightText = sanitizeWeightInput(v) },
-                            label = { Text(stringResource(R.string.task_weight)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        )
+                    when (timingMode) {
+                        GroupTimingMode.WEIGHTED -> {
+                            OutlinedTextField(
+                                value = weightText,
+                                onValueChange = { v -> weightText = sanitizeWeightInput(v) },
+                                label = { Text(stringResource(R.string.task_weight)) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            )
+                        }
+                        GroupTimingMode.PER_TASK -> {
+                            OutlinedTextField(
+                                value = durationMinutesText,
+                                onValueChange = { value ->
+                                    durationMinutesText = value.filter(Char::isDigit)
+                                },
+                                label = { Text(stringResource(R.string.task_duration_minutes)) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                        }
+                        GroupTimingMode.UNTIMED -> Unit
+                    }
+                    if (timingMode != GroupTimingMode.UNTIMED) {
                         Spacer(Modifier.height(12.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1080,7 +1183,16 @@ private fun TaskEditDialog(
                     onSave(
                         name,
                         description,
-                        if (timedGroup) parsedWeight ?: 1.0 else 1.0,
+                        if (timingMode == GroupTimingMode.WEIGHTED) {
+                            parsedWeight ?: initialWeight.coerceAtLeast(1.0)
+                        } else {
+                            initialWeight.coerceAtLeast(1.0)
+                        },
+                        if (timingMode == GroupTimingMode.PER_TASK) {
+                            parsedDurationMinutes ?: initialDurationMinutes.coerceAtLeast(1)
+                        } else {
+                            initialDurationMinutes.coerceAtLeast(1)
+                        },
                         if (ephemeral) true else enabled,
                         if (ephemeral) Task.ALL_DAYS_MASK else scheduledDays,
                         ephemeralDate.takeIf { ephemeral },

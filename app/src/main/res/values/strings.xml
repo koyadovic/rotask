@@ -3,10 +3,14 @@
     <string name="app_name">Rotask</string>
 
     <string name="home_title">Rotask</string>
-    <string name="daily_minutes_value">%1$d min/day</string>
     <string name="minutes_per_day">Minutes per day</string>
-    <string name="group_timed">Use timer</string>
     <string name="group_without_time">No timer</string>
+    <string name="group_timing_mode">Timing</string>
+    <string name="group_mode_weighted">Weights</string>
+    <string name="group_mode_per_task">Per task</string>
+    <string name="group_mode_untimed">No timer</string>
+    <string name="group_weighted_time_value">%1$d min/day · weights</string>
+    <string name="group_task_time_value">%1$d min in tasks</string>
 
     <string name="empty_groups">No groups yet. Create one to start.</string>
     <string name="group_empty">No tasks in this group yet.</string>
@@ -31,6 +35,8 @@
     <string name="task_name">Name</string>
     <string name="task_description">Description (what to train)</string>
     <string name="task_weight">Weight</string>
+    <string name="task_duration_minutes">Minutes</string>
+    <string name="task_minutes_value">%1$d min</string>
     <string name="task_enabled">Active in rotation</string>
     <string name="task_paused">Paused</string>
     <string name="task_done_today">Done today</string>

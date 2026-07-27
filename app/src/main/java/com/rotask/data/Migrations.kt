@@ -105,6 +105,31 @@ val MIGRATION_7_8: Migration = object : Migration(7, 8) {
     }
 }
 
+val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Legacy ephemeral tasks could only target their creation day; give expired ones one day today.
+        db.execSQL(
+            """
+            UPDATE `tasks`
+            SET `ephemeralDate` = date('now', 'localtime')
+            WHERE `ephemeralDate` IS NOT NULL
+              AND `ephemeralDate` < date('now', 'localtime')
+            """.trimIndent()
+        )
+    }
+}
+
+val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `groups` ADD COLUMN `taskDurationMode` INTEGER NOT NULL DEFAULT 0"
+        )
+        db.execSQL(
+            "ALTER TABLE `tasks` ADD COLUMN `durationMinutes` INTEGER NOT NULL DEFAULT 1"
+        )
+    }
+}
+
 val MIGRATION_3_4: Migration = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(

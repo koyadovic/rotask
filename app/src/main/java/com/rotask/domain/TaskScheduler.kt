@@ -57,10 +57,13 @@ class TaskScheduler(private val db: AppDatabase) {
             }
             val sumWeights = enabledTasks.sumOf { it.weight }
             val totalSecs = group.dailyMinutes * 60L
-            val targetSecondsByTaskId = if (group.timed && sumWeights > 0.0) {
-                allocateTargetSeconds(enabledTasks, totalSecs, sumWeights)
-            } else {
-                emptyMap()
+            val targetSecondsByTaskId = when {
+                !group.timed -> emptyMap()
+                group.taskDurationMode -> enabledTasks.associate { task ->
+                    task.id to task.durationMinutes.coerceAtLeast(1) * 60L
+                }
+                sumWeights > 0.0 -> allocateTargetSeconds(enabledTasks, totalSecs, sumWeights)
+                else -> emptyMap()
             }
             val statuses = tasks.map { t ->
                 val scheduledToday = t.isScheduledOn(today)
